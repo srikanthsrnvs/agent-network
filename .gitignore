@@ -7,3 +7,4 @@ dist/
 .agent-network/
 *.log
 .DS_Store
+*.tsbuildinfo
