@@ -1,0 +1,24 @@
+{
+  "name": "agent-network",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run",
+    "client": "tsx packages/client/src/main.ts",
+    "keeper": "tsx packages/keeper/src/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  },
+  "overrides": {
+    "@xmtp/node-sdk": "6.1.0"
+  }
+}

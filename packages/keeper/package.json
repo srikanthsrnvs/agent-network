@@ -1,0 +1,13 @@
+{
+  "name": "@agent-network/keeper",
+  "version": "0.1.0",
+  "description": "room-keeper: admin of every room; adds anyone who DMs it 'join <room>'",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": "./dist/index.js" },
+  "dependencies": {
+    "@xmtp/agent-sdk": "^2.3.0",
+    "viem": "^2.57.0"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@agent-network/client",
+  "version": "0.1.0",
+  "description": "device client: XMTP transport + the four primitive tools + the agent's model loop",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": "./dist/index.js" },
+  "dependencies": {
+    "@agent-network/resolver": "*",
+    "@openrouter/ai-sdk-provider": "^3.1.0",
+    "@xmtp/agent-sdk": "^2.3.0",
+    "ai": "^7.0.0",
+    "viem": "^2.57.0",
+    "zod": "^4.6.0"
+  }
+}

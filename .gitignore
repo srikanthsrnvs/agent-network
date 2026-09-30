@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+*.db3
+*.db3-*
+.xmtp/
+.agent-network/
+*.log
+.DS_Store

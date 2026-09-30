@@ -1,0 +1,13 @@
+{
+  "name": "@agent-network/resolver",
+  "version": "0.1.0",
+  "description": "name -> verified agent address (ENS + ERC-8004), with a static dev backend",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": "./dist/index.js" },
+  "dependencies": {
+    "erc-8004-js": "^2.0.1",
+    "viem": "^2.57.0"
+  }
+}
