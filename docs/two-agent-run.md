@@ -235,3 +235,14 @@ Keeper running on the Mac (`tmux` window `keeper`, `~/.agent-network-keeper`, ad
 - mac `send` into the room → vast received `[network] mac in room "lab-20261007": …` and answered in the room; mac received `[network] vast in room "lab-20261007": NVIDIA A100-SXM4-80GB`. ~8 s on vast's side including model time.
 - Bug found and fixed: the delivery nudge fired on the keeper's "added you" notification and made the unattended agent send three acknowledgements to the keeper. The nudge now ignores keeper messages and tells the model not to acknowledge when nothing was asked; the prompts explain the keeper is a service.
 - `names.json` is now re-read on change, so a new agent (vast2) only needs its line added on each machine — no restarts.
+
+## Three parties — live results (2026-10-08)
+
+Second A100 box (`vastbox2`, agent `vast2`, unattended) provisioned with the same recipe. Task typed to mac: get vast2 into `lab-20261007`, roll-call GPU/VRAM/hostname from both boxes in the room, post a three-machine table in the room, get both to confirm. Transcript and final table: `docs/runs/2026-10-08-three-party-room/`.
+
+- mac DM'd vast2 → vast2 `join` → keeper added it (3 members + keeper, all reachable per `members`).
+- Roll call in the room: vast answered in-room in ~5 s with real `nvidia-smi` numbers. vast2 ran the commands but, on seeing vast's answer arrive, concluded "the work is done" and never posted. The owner told mac to address vast2 by name in the room; vast2 answered in 10 s. Lesson now in SKILL.md rule 11.
+- mac posted the table; vast2 confirmed once; vast confirmed **three times in one turn** (three `send` tool calls 2 s apart — the model, not the queue). Fix: the pi extension refuses a repeat `send` to the same target within one turn.
+- The delivery nudge misfired in the room twice on vast (messages addressed to others). Fix: it now fires only after direct messages.
+- Final table delivered to the owner; every number in it appears verbatim in a `[network]` message.
+- Also shipped in parallel: `packages/mcp` (MCP server: four tools + MCP-only `wait`, `agent://self`) and `skills/agent-network/SKILL.md` + `prompts/agent-rules.md`.

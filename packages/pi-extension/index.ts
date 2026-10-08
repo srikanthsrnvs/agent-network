@@ -79,9 +79,9 @@ export default function agentNetwork(pi: ExtensionAPI) {
     }
   });
 
-  // Local models sometimes answer a [network] message in plain text. On an unattended machine
-  // that reaches nobody, so when such a run ends with a long answer and no send, say so once.
-  // (An attended agent relays answers to its owner in plain text on purpose, hence the gate.)
+  // Local models sometimes answer a direct [network] message in plain text. On an unattended
+  // machine that reaches nobody, so when such a run ends with a long answer and no send, say so
+  // once. (An attended agent relays answers to its owner in plain text on purpose, hence the gate.)
   const nudged = new Set<string>();
   if (process.env.AGENT_UNATTENDED === "1") pi.on("agent_end", ({ messages }) => {
     let i = messages.length - 1;
@@ -89,7 +89,8 @@ export default function agentNetwork(pi: ExtensionAPI) {
     const trigger = i >= 0 ? messages[i] : undefined;
     if (!trigger || trigger.role !== "custom" || trigger.customType !== "network" || typeof trigger.content !== "string") return;
     if (nudged.has(trigger.content)) return;
-    const who = /^\[network\] (\S+) in /.exec(trigger.content)?.[1];
+    // Only direct messages are certainly addressed to us; in a room most messages are for someone else.
+    const who = /^\[network\] (\S+) in a direct message/.exec(trigger.content)?.[1];
     if (!who || who.toLowerCase() === "keeper" || who.toLowerCase() === (process.env.KEEPER_ADDRESS ?? "keeper").toLowerCase()) return;
     let sent = false;
     let answer = "";
@@ -112,6 +113,10 @@ export default function agentNetwork(pi: ExtensionAPI) {
     );
   });
 
+  // Local models were seen calling send three times with the same target in one turn.
+  const sentThisRun = new Set<string>();
+  pi.on("agent_start", () => sentThisRun.clear());
+
   const register = (toolName: ToolName, description: string) =>
     pi.registerTool({
       name: toolName,
@@ -120,6 +125,14 @@ export default function agentNetwork(pi: ExtensionAPI) {
       parameters: schemas[toolName],
       async execute(toolCallId, params, signal) {
         if (!tools) throw new Error("agent-network: not connected");
+        if (toolName === "send") {
+          const target = String((params as { target: string }).target).trim().toLowerCase();
+          if (sentThisRun.has(target)) {
+            const result = { ok: false, error: `you already sent to ${target} in this turn — one message per recipient per turn; end your turn and wait for the reply` };
+            return { content: [{ type: "text", text: JSON.stringify(result) }], details: undefined };
+          }
+          sentThisRun.add(target);
+        }
         const abortSignal = AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : [])]);
         const result = await tools[toolName].execute!(params as never, { toolCallId, messages: [], abortSignal });
         return { content: [{ type: "text", text: JSON.stringify(result) }], details: undefined };

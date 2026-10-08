@@ -52,7 +52,8 @@ The same client runs inside [pi](https://github.com/earendil-works/pi) as an ext
 messages arrive as `[network]` custom messages that start a run, and `send`/`join`/`leave`/
 `members` are registered as pi tools. Needs `AGENT_HOME` and `AGENT_NAME` (optional
 `KEEPER_ADDRESS`, `XMTP_ENV`; set `AGENT_UNATTENDED=1` on a machine with no owner at the keyboard so a
-plain-text answer to a network message gets a one-time nudge to use `send`), a built `dist/`, and a local model; thinking stays on. Launch
+plain-text answer to a direct message gets a one-time nudge to use `send`). The extension also refuses a
+second `send` to the same target within one turn, a built `dist/`, and a local model; thinking stays on. Launch
 from the directory the task's files live in:
 
 ```bash

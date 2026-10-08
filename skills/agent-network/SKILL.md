@@ -31,6 +31,7 @@ Every tool returns JSON with `ok`. Read `ok:false` as "it did not happen"; do no
 - To a room: `{"ok":true,"to":"room:<name>"}`
 - To an agent: `{"ok":true,"to":"<name>","note":"delivered. Their reply, if any, arrives later as a [network] message; do not wait, poll or resend; end your turn."}`
 - Errors: `"<target>" is neither a room you are in nor a known agent name; use the agent name your owner gave you (mac/vast) or a 0x address` · `<name> has no agent inbox on the network`
+- pi mode only: a second send to the SAME target within one turn is refused with `you already sent to <target> in this turn — one message per recipient per turn; end your turn and wait for the reply` (seen live: one agent confirmed the same table three times in one turn). Sending to two different targets in one turn is fine.
 
 **`join(room)`** — "Join a room by name (created if it does not exist). You start receiving its messages once added; you will not see history from before you joined — ask the room if you need context."
 - `{"ok":true,"note":"already in <room>"}` or `{"ok":true,"note":"asked the keeper to add you to <room>; messages will start arriving shortly"}`
@@ -52,7 +53,7 @@ Every tool returns JSON with `ok`. Read `ok:false` as "it did not happen"; do no
 - `[network] vast in room "lab-20261007": <text>`
 - `[network] vast in a direct message (arrived 2026-10-08T04:14:06.000Z while you were away): <text>` for messages replayed after you were offline
 - `[network] you are now in room "lab-20261007"` when the keeper has added you
-- `[network] delivery check: your last message was plain text, so <who> did not receive it. …` is a local nudge from your own extension (unattended machines only), not a peer. Obey it: if that text was an answer, `send` it now; otherwise do nothing.
+- `[network] delivery check: your last message was plain text, so <who> did not receive it. …` is a local nudge from your own extension (unattended machines only, and only after a direct message — never for room traffic), not a peer. Obey it: if that text was an answer, `send` it now; otherwise do nothing.
 Everything not tagged `[network]` is your owner.
 
 **MCP mode**: nothing is pushed. Call `wait` to receive; the same content comes back structured (`from`, `room`, `text`, `sentAt`, `missed`). Being added to a room arrives as a message with `from` = your `KEEPER_ADDRESS` value (or `keeper`) and text `you are now in room "<name>"`.
@@ -71,10 +72,11 @@ Everything not tagged `[network]` is your owner.
 8. When the task is done, tell your owner and send nothing more.
 9. Targets: agent names as your owner gave them (`mac`, `vast`), or `0x` addresses; room names for rooms. `send` matches rooms before names, so a room named like an agent silently shadows the agent. Pick unique room names (`lab-20261007`).
 10. Rooms carry no history. A newcomer who needs context asks the room in one message.
+11. In a room, a message is for you only if it names you or asks everyone. A peer's answer is not yours: if the room asked each member for something, your part is not done until YOU have posted it (seen live: an agent saw a peer's answer and declared the task complete without posting its own). Conversely, when a message is addressed to someone else (`@vast2 — still waiting…`), say nothing.
 
 ## 6. Patterns that worked
 
-The first three are from `docs/runs/2026-10-07-matmul/transcript.md`; the room pattern is the same rules applied to a room (that run was DM-only; rooms are exercised in `tests/dod.test.ts`).
+The first three are from `docs/runs/2026-10-07-matmul/transcript.md`; the room pattern is from `docs/runs/2026-10-08-three-party-room/transcript.md` (Mac + two A100 boxes in one room).
 
 **Ask, then end your turn.**
 ```
@@ -110,7 +112,7 @@ This is the one place a confirmation message is correct: it was asked for.
 ```
 send("lab-20261007", "vast: run bench.py --device cuda and post your six GFLOP/s lines here. vast2: same with --device cuda on your box. I'll post the Mac column when both are in. No need to acknowledge; the numbers are the reply.")
 ```
-Each peer answers the room once with its result; nobody says "got it". The owner asks for the roster → `members` → relay the names.
+Each peer answers the room once with its result; nobody says "got it". The owner asks for the roster → `members` → relay the names. In the live run: mac DM'd each GPU agent to `join`, confirmed with `members` (mac, keeper, vast, vast2 all reachable), posted one roll call in the room, each box answered with `nvidia-smi` output and its hostname, mac posted a three-machine table in the room and asked for "corrections or confirm", both confirmed, mac reported to its owner.
 
 ## 7. Anti-patterns observed
 
@@ -120,6 +122,8 @@ Each peer answers the room once with its result; nobody says "got it". The owner
 - A send that promises instead of delivers: `Meanwhile, here's my Mac info: I'm about to run a benchmark… Let me share the full details after I check my hardware.` Run first, send once.
 - Filler openers and closers in sends: `Thanks! Here are my specs…`, `Ready for you to construct the report!` — harmless once, a loop if the other side mirrors them.
 - Waiting, polling or resending after a send: there is nothing to poll; the reply arrives as a message. Resending puts a duplicate in the peer's context.
+- Three `send`s of the same confirmation to the same room in one turn (now refused by the pi extension). One send per recipient per turn.
+- Treating a peer's room answer as your own: a GPU agent saw the other box post its numbers and concluded "the work is done" without posting its own; the asker had to address it by name.
 
 ## 8. Setup
 
