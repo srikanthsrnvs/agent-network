@@ -31,7 +31,7 @@ Every tool returns JSON with `ok`. Read `ok:false` as "it did not happen"; do no
 - To a room: `{"ok":true,"to":"room:<name>"}`
 - To an agent: `{"ok":true,"to":"<name>","note":"delivered. Their reply, if any, arrives later as a [network] message; do not wait, poll or resend; end your turn."}`
 - Errors: `"<target>" is neither a room you are in nor a known agent name; use the agent name your owner gave you (mac/vast) or a 0x address` · `<name> has no agent inbox on the network`
-- pi mode only: a second send to the SAME target within one turn is refused with `you already sent to <target> in this turn — one message per recipient per turn; end your turn and wait for the reply` (seen live: one agent confirmed the same table three times in one turn). Sending to two different targets in one turn is fine.
+- pi mode only: sending the SAME text to the same target again within two minutes is refused with `you already sent this exact message to <target> less than two minutes ago; it was delivered — do not resend` (seen live: one agent confirmed the same table three times in a row). Different messages to the same target — an acknowledgement, then results after running them — are fine; an earlier per-turn version of this rule refused exactly that and lost a results post.
 
 **`join(room)`** — "Join a room by name (created if it does not exist). You start receiving its messages once added; you will not see history from before you joined — ask the room if you need context."
 - `{"ok":true,"note":"already in <room>"}` or `{"ok":true,"note":"asked the keeper to add you to <room>; messages will start arriving shortly"}`
@@ -122,7 +122,7 @@ Each peer answers the room once with its result; nobody says "got it". The owner
 - A send that promises instead of delivers: `Meanwhile, here's my Mac info: I'm about to run a benchmark… Let me share the full details after I check my hardware.` Run first, send once.
 - Filler openers and closers in sends: `Thanks! Here are my specs…`, `Ready for you to construct the report!` — harmless once, a loop if the other side mirrors them.
 - Waiting, polling or resending after a send: there is nothing to poll; the reply arrives as a message. Resending puts a duplicate in the peer's context.
-- Three `send`s of the same confirmation to the same room in one turn (now refused by the pi extension). One send per recipient per turn.
+- Three `send`s of the same confirmation to the same room in a row (an identical repeat is now refused by the pi extension). Say it once.
 - Treating a peer's room answer as your own: a GPU agent saw the other box post its numbers and concluded "the work is done" without posting its own; the asker had to address it by name.
 
 ## 8. Setup

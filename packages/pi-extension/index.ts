@@ -113,9 +113,18 @@ export default function agentNetwork(pi: ExtensionAPI) {
     );
   });
 
-  // Local models were seen calling send three times with the same target in one turn.
-  const sentThisRun = new Set<string>();
-  pi.on("agent_start", () => sentThisRun.clear());
+  // Local models were seen sending the same message to the same target three times in a row.
+  // Refuse an identical message to the same target within two minutes; different text passes
+  // (an acknowledgement followed by results in one long turn is legitimate and was once lost).
+  const recentSends: Array<{ key: string; at: number }> = [];
+  const duplicate = (target: string, text: string): boolean => {
+    const now = Date.now();
+    while (recentSends.length && now - recentSends[0].at > 120_000) recentSends.shift();
+    const key = `${target}\u0000${text.toLowerCase().replace(/\s+/g, " ").trim()}`;
+    if (recentSends.some((r) => r.key === key)) return true;
+    recentSends.push({ key, at: now });
+    return false;
+  };
 
   const register = (toolName: ToolName, description: string) =>
     pi.registerTool({
@@ -126,12 +135,11 @@ export default function agentNetwork(pi: ExtensionAPI) {
       async execute(toolCallId, params, signal) {
         if (!tools) throw new Error("agent-network: not connected");
         if (toolName === "send") {
-          const target = String((params as { target: string }).target).trim().toLowerCase();
-          if (sentThisRun.has(target)) {
-            const result = { ok: false, error: `you already sent to ${target} in this turn — one message per recipient per turn; end your turn and wait for the reply` };
+          const { target, text: body } = params as { target: string; text: string };
+          if (duplicate(target.trim().toLowerCase(), body)) {
+            const result = { ok: false, error: `you already sent this exact message to ${target.trim()} less than two minutes ago; it was delivered — do not resend` };
             return { content: [{ type: "text", text: JSON.stringify(result) }], details: undefined };
           }
-          sentThisRun.add(target);
         }
         const abortSignal = AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : [])]);
         const result = await tools[toolName].execute!(params as never, { toolCallId, messages: [], abortSignal });
