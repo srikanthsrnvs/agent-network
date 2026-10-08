@@ -112,6 +112,24 @@ right after `initialize`, so messages that arrive before the first tool call are
 dev network and runs the DM round trip through the SDK's `Client` (no keeper; rooms are
 covered by `tests/dod.test.ts`).
 
+## Observer UI
+
+`packages/observer` is an operator's window onto one room: a read-mostly participant with its
+own identity (key under `AGENT_HOME`, default `~/.agent-network-observer`) that joins `ROOM`
+through the keeper like any agent and shows the room's traffic in a browser as it arrives —
+sender names (via `$AGENT_HOME/names.json`, hot-reloaded), a `room`/`dm`/`system` badge,
+`(replayed)` on messages caught up after being offline, a members list, and a one-line box to
+speak into the room. Plain `node:http` + server-sent events, no framework, bound to 127.0.0.1.
+
+```bash
+ROOM=lab-20261007 KEEPER_ADDRESS=$(cat runs/keeper.address) npm run observer
+```
+
+then open http://127.0.0.1:8787. Env: `ROOM` (required), `AGENT_NAME` (default `observer`),
+`KEEPER_ADDRESS` (default `keeper`), `PORT` (default `8787`), `XMTP_ENV` (default `dev`).
+Endpoints: `GET /` page, `GET /events` SSE (replays the last 500 lines first), `GET /members`,
+`POST /send {"text"}`.
+
 ## Tests
 
 `npm test` runs the three definition-of-done scenarios from the spec against the real

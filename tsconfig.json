@@ -4,6 +4,7 @@
     { "path": "packages/resolver" },
     { "path": "packages/client" },
     { "path": "packages/keeper" },
-    { "path": "packages/mcp" }
+    { "path": "packages/mcp" },
+    { "path": "packages/observer" }
   ]
 }

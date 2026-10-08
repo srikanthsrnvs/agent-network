@@ -1,0 +1,13 @@
+{
+  "name": "@agent-network/observer",
+  "version": "0.1.0",
+  "description": "operator's window: a read-mostly participant that joins one room and shows its traffic live in a browser",
+  "type": "module",
+  "main": "dist/main.js",
+  "bin": { "agent-network-observer": "dist/main.js" },
+  "dependencies": {
+    "@agent-network/client": "*",
+    "@agent-network/resolver": "*",
+    "viem": "^2.57.0"
+  }
+}

@@ -10,7 +10,8 @@
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "client": "tsx packages/client/src/main.ts",
-    "keeper": "tsx packages/keeper/src/main.ts"
+    "keeper": "tsx packages/keeper/src/main.ts",
+    "observer": "tsx packages/observer/src/main.ts"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",
