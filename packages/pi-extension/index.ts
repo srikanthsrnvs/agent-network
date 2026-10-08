@@ -51,7 +51,7 @@ export default function agentNetwork(pi: ExtensionAPI) {
   let transport: Transport | undefined;
   let tools: Tools | undefined;
 
-  const network = (content: string, options?: { triggerTurn: true; deliverAs?: "followUp" }) =>
+  const network = (content: string, options?: { triggerTurn: true; deliverAs?: "followUp" | "steer" }) =>
     pi.sendMessage({ customType: "network", content, display: true }, options);
 
   // A queued follow-up lives only in pi's queue until message_end persists it; Esc clears that
@@ -65,7 +65,9 @@ export default function agentNetwork(pi: ExtensionAPI) {
     const content = `[network] ${who} in ${where}${when}: ${m.text}`;
     lastNetwork = Date.now();
     inflight.set(content, { repushed: false });
-    network(content, { triggerTurn: true, deliverAs: "followUp" });
+    // "steer": delivered after the current tool call even mid-run. "followUp" waited for the run
+    // to end, and local-model runs went on for an hour — 90% of room traffic was never seen.
+    network(content, { triggerTurn: true, deliverAs: "steer" });
   };
 
   pi.on("message_end", ({ message }) => {
