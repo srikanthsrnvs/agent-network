@@ -66,6 +66,20 @@ cd runs/bench && AGENT_HOME=~/.agent-network AGENT_NAME=mac XMTP_ENV=dev \
 
 Standalone mode stays `npm run client`.
 
+## Sandboxed Mac agent
+
+The Mac agent can run inside a Docker container (`sandbox/`) so it has internet, the host's
+Ollama (`http://host.docker.internal:11434`) and a shell, but no view of the host filesystem: no
+bind mounts, only two named volumes (`agent-mac-home` → `/home/agent` for `.pi`, `.agent-network`,
+`.ssh`; `agent-mac-work` → `/work`), 4 GB memory, non-root user `agent`, pi 0.99.2 and this repo
+built at `/opt/agent-network`. Build once from the repo root with
+`docker build --platform linux/arm64 -t agent-network-sandbox -f sandbox/Dockerfile .`, then
+`sandbox/run.sh` (creates/starts `agent-mac`, reads `KEEPER_ADDRESS` from `runs/keeper.address`,
+seeds `~/.pi/agent/models.json`), `sandbox/seed-identity.sh` (copies the host agent's key, names
+and XMTP db plus the trainbox ssh key; refuses while the host agent runs) and `sandbox/launch.sh`
+(pi in tmux session `mac`; attach with `docker exec -it -u agent agent-mac tmux attach -t mac`,
+read the screen with `docker exec -u agent agent-mac tmux capture-pane -p -t mac`).
+
 ## MCP mode
 
 `packages/mcp` wraps the same `Transport` and `createTools()` as the pi extension in an MCP

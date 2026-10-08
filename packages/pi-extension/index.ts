@@ -3,6 +3,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import type { XmtpEnv } from "@xmtp/node-sdk";
 import { Transport, createTools, loadOrCreateKeystore, type Inbound, type Tools } from "@agent-network/client";
@@ -159,7 +161,45 @@ export default function agentNetwork(pi: ExtensionAPI) {
   pi.on("agent_settled", () => { running = false; });
   let heartbeat: NodeJS.Timeout | undefined;
 
+  // Long-term memory (OptMem): `memo wake` prints the agent's memory — recent lines verbatim,
+  // older ones as tree summaries. Pushed into context at session start and again after every
+  // compaction, so what was decided and tried outlives pi's own context window. The agent writes
+  // memories itself with `memo note` (see its system prompt); AGENT_MEMO points at the tool.
+  const memo = process.env.AGENT_MEMO ?? join(homedir(), ".optmem", "memo");
+  const wake = (): string | null => {
+    if (!existsSync(memo)) return null;
+    const parts: string[] = [];
+    try {
+      let part = 1;
+      let total: string | undefined;
+      for (;;) {
+        const out = execFileSync(memo, total ? ["wake", String(part), total] : ["wake"], { encoding: "utf8", timeout: 20_000, stdio: ["ignore", "pipe", "pipe"] });
+        parts.push(out.trimEnd());
+        const next = /Run: \S+ wake (\d+) (\d+)/.exec(out);
+        if (!next || out.includes("You are awake.")) break;
+        part = Number(next[1]);
+        total = next[2];
+        if (part > 50) break;
+      }
+    } catch (err) {
+      const e = err as { stdout?: string; stderr?: string; message?: string };
+      parts.push((e.stdout ?? "") + (e.stderr ?? e.message ?? ""));
+    }
+    return parts.join("\n").trim();
+  };
+  const pushMemory = (why: string, options?: { deliverAs?: "steer" | "followUp" }) => {
+    const text = wake();
+    if (text === null) return;
+    process.stderr.write(`[agent-network] memory: ${why} (${text.length} chars from ${memo})\n`);
+    pi.sendMessage(
+      { customType: "memory", content: `[memory] ${why} — output of \`${memo} wake\`:\n${text}`, display: true },
+      options as never,
+    );
+  };
+  pi.on("session_compact", ({ reason }) => pushMemory(`context was just compacted (${reason}); your long-term memory, re-read`, { deliverAs: "steer" }));
+
   pi.on("session_start", async () => {
+    pushMemory("session start; your long-term memory");
     if (heartbeatMs > 0 && !heartbeat) {
       heartbeat = setInterval(() => {
         if (running || Date.now() - lastNetwork < heartbeatMs) return;
