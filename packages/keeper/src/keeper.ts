@@ -69,6 +69,12 @@ export class Keeper {
 
     if (verb === 'rooms') {
       await ctx.conversation.sendText([...this.rooms.keys()].sort().join(', ') || '(no rooms yet)');
+      this.opts.log?.(`${sender} asked for rooms`);
+      return;
+    }
+    if (verb !== 'join' && verb !== 'leave') {
+      await ctx.conversation.sendText(`I only understand: join <room>, leave <room>, rooms. Rooms: ${[...this.rooms.keys()].sort().join(', ') || '(none yet)'}`);
+      this.opts.log?.(`${sender} sent an unknown command: ${ctx.message.content.slice(0, 60)}`);
       return;
     }
     if (!room) return;
