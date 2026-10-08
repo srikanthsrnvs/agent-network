@@ -63,10 +63,11 @@ export default function agentNetwork(pi: ExtensionAPI) {
     }
   });
 
-  // Local models sometimes answer a [network] message in plain text, which reaches nobody.
-  // When a run that a network message started ends with a long answer and no send, say so once.
+  // Local models sometimes answer a [network] message in plain text. On an unattended machine
+  // that reaches nobody, so when such a run ends with a long answer and no send, say so once.
+  // (An attended agent relays answers to its owner in plain text on purpose, hence the gate.)
   const nudged = new Set<string>();
-  pi.on("agent_end", ({ messages }) => {
+  if (process.env.AGENT_UNATTENDED === "1") pi.on("agent_end", ({ messages }) => {
     let i = messages.length - 1;
     while (i >= 0 && messages[i].role !== "user" && messages[i].role !== "custom") i--;
     const trigger = i >= 0 ? messages[i] : undefined;
