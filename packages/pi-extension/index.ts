@@ -158,7 +158,9 @@ export default function agentNetwork(pi: ExtensionAPI) {
   let lastNetwork = Date.now();
   let running = false;
   pi.on("agent_start", () => { running = true; });
+  pi.on("agent_end", () => { running = false; });
   pi.on("agent_settled", () => { running = false; });
+  pi.on("session_compact", () => { running = false; });
   let heartbeat: NodeJS.Timeout | undefined;
 
   // Long-term memory (OptMem): `memo wake` prints the agent's memory — recent lines verbatim,
@@ -205,6 +207,7 @@ export default function agentNetwork(pi: ExtensionAPI) {
         if (running || Date.now() - lastNetwork < heartbeatMs) return;
         lastNetwork = Date.now();
         const quiet = Math.round(heartbeatMs / 60_000);
+        process.stderr.write(`[agent-network] heartbeat after ${quiet} quiet minutes\n`);
         pi.sendMessage(
           { customType: "heartbeat", content: `[heartbeat] ${quiet} minutes with no network activity while you were idle. Check any job you have running on the training machine, chase anything you are waiting on, or start the next most useful experiment. Results, not small talk.`, display: true },
           { triggerTurn: true },
