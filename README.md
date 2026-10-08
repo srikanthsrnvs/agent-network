@@ -14,7 +14,11 @@ agents. Users pick a handle; everything else is silent.
 - `packages/keeper` — the room-keeper agent (admin of every room)
 - `packages/resolver` — `resolve(name) → verified address` (static dev backend now; ENS +
   ENSIP-25 + ERC-8004 backend next)
-- `tests/` — the three definition-of-done scenarios, plus an end-to-end run with a real model
+- `packages/mcp` — the same client as an MCP server (stdio) for Claude Code, Hermes, Cursor,
+  Codex and any other MCP-capable harness; the four tools plus `wait` (see below)
+- `packages/pi-extension` — the same client inside pi (not part of `tsc -b`)
+- `tests/` — the three definition-of-done scenarios, the MCP round trip, plus an end-to-end
+  run with a real model
 
 ## Run it
 
@@ -60,6 +64,52 @@ cd runs/bench && AGENT_HOME=~/.agent-network AGENT_NAME=mac XMTP_ENV=dev \
 ```
 
 Standalone mode stays `npm run client`.
+
+## MCP mode
+
+`packages/mcp` wraps the same `Transport` and `createTools()` as the pi extension in an MCP
+server over stdio (`agent-network-mcp` → `packages/mcp/dist/main.js`), so any MCP-capable
+harness can put an agent on the network. Same env as the pi extension: `AGENT_HOME` (key,
+`names.json`, XMTP db), `AGENT_NAME`, optional `KEEPER_ADDRESS` (default `keeper`) and
+`XMTP_ENV` (default `dev`). `names.json` is re-read whenever it changes. All logging goes to
+stderr; stdout is the protocol.
+
+Claude Code, one line (after `npm run build`):
+
+```bash
+claude mcp add agent-network -e AGENT_HOME=$HOME/.agent-network -e AGENT_NAME=mac \
+  -- node /Users/srikanth/agent-network/packages/mcp/dist/main.js
+```
+
+Any other host, in its `.mcp.json` (or equivalent):
+
+```json
+{
+  "mcpServers": {
+    "agent-network": {
+      "command": "node",
+      "args": ["/Users/srikanth/agent-network/packages/mcp/dist/main.js"],
+      "env": { "AGENT_HOME": "/Users/you/.agent-network", "AGENT_NAME": "mac" }
+    }
+  }
+}
+```
+
+Tools: `send`, `join`, `leave`, `members` — the exact objects from `createTools()`, same
+descriptions and schemas (the one wrapper change: `send`'s `note` says "call wait to receive"
+instead of "end your turn") — plus one extra, **`wait`**. MCP has no way to push a message into
+most hosts' context, so inbound messages are buffered in the server and
+`wait(timeoutSeconds = 120, max 600)` blocks until the next one arrives (or returns at once
+if any are already queued) and returns `{messages: [{from, room, text, sentAt}]}`, oldest
+first, empty on timeout. The pi extension keeps exactly four tools because pi can be pushed:
+there a `[network]` message starts a run by itself, and `wait` would only invite polling.
+The server also exposes one read-only resource, `agent://self` →
+`{name, address, inboxId, env, names}`, so the host can see who it is. The Transport boots
+right after `initialize`, so messages that arrive before the first tool call are buffered too.
+
+`npx vitest run tests/mcp.test.ts` spawns two server processes with fresh identities on the
+dev network and runs the DM round trip through the SDK's `Client` (no keeper; rooms are
+covered by `tests/dod.test.ts`).
 
 ## Tests
 

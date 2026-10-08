@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/resolver" },
     { "path": "packages/client" },
-    { "path": "packages/keeper" }
+    { "path": "packages/keeper" },
+    { "path": "packages/mcp" }
   ]
 }

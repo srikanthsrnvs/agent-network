@@ -1,0 +1,14 @@
+{
+  "name": "@agent-network/mcp",
+  "version": "0.1.0",
+  "description": "MCP server (stdio): the same four tools — send, join, leave, members — plus wait, for any MCP-capable harness",
+  "type": "module",
+  "main": "dist/main.js",
+  "bin": { "agent-network-mcp": "dist/main.js" },
+  "dependencies": {
+    "@agent-network/client": "*",
+    "@agent-network/resolver": "*",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.0"
+  }
+}
