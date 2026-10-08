@@ -8,4 +8,4 @@ dist/
 *.log
 .DS_Store
 *.tsbuildinfo
-runs/
+/runs/
