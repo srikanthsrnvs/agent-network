@@ -11,6 +11,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { isAddress } from 'viem';
 import { Transport, loadOrCreateKeystore, resolveHome, type Inbound } from '@agent-network/client';
 import { Resolver, StaticBackend, type NameBackend, type Resolved } from '@agent-network/resolver';
@@ -136,6 +137,24 @@ server.on("error", (err: NodeJS.ErrnoException) => {
   }
   throw err;
 });
+// Follow the keeper's room list (same machine), joining any room the agents create.
+const keeperRooms = process.env.KEEPER_ROOMS_FILE ?? join(homedir(), '.agent-network-keeper', 'rooms.json');
+const joinedOrAsked = new Set<string>([ROOM]);
+async function followRooms(): Promise<void> {
+  if (!existsSync(keeperRooms)) return;
+  let rooms: Record<string, string>;
+  try { rooms = JSON.parse(readFileSync(keeperRooms, 'utf8')); } catch { return; }
+  for (const name of Object.keys(rooms)) {
+    if (joinedOrAsked.has(name) || name.startsWith('observer-selftest')) continue;
+    if (await transport.findRoom(name)) { joinedOrAsked.add(name); continue; }
+    const k = await resolver.resolve(process.env.KEEPER_ADDRESS ?? 'keeper');
+    if (!k) return;
+    joinedOrAsked.add(name);
+    await transport.sendDm(k.address, `join ${name}`);
+    push({ ts: new Date().toISOString(), from: 'system', room: name, kind: 'system', text: `asked the keeper to add me to ${name} (new room seen in the keeper's list)`, missed: false });
+  }
+}
+setInterval(() => void followRooms().catch((e) => log('followRooms:', String(e))), 30_000);
 server.listen(port, '127.0.0.1', () => log(`${name} ${keystore.address} online; watching ${ROOM} at http://127.0.0.1:${port}`));
 
 const shutdown = async () => { server.close(); for (const c of clients) c.end(); await transport.stop().catch(() => undefined); process.exit(0); };
