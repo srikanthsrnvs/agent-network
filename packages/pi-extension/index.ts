@@ -2,11 +2,11 @@
 // start a run; the four tools wrap createTools() unchanged. Loaded by pi's jiti; not in `tsc -b`.
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { XmtpEnv } from "@xmtp/node-sdk";
 import { Transport, createTools, loadOrCreateKeystore, type Inbound, type Tools } from "@agent-network/client";
-import { Resolver, StaticBackend } from "@agent-network/resolver";
+import { Resolver, StaticBackend, type NameBackend, type Resolved } from "@agent-network/resolver";
 
 const room = Type.Object({ room: Type.String({ minLength: 1 }) });
 const schemas = {
@@ -20,14 +20,30 @@ const schemas = {
 };
 type ToolName = keyof typeof schemas;
 
+/** $AGENT_HOME/names.json, re-read when it changes, so new agents need no restart. */
+class NamesFile implements NameBackend {
+  private inner = new StaticBackend({});
+  private mtime = -1;
+  constructor(private readonly path: string, private readonly self: string, private readonly selfAddress: `0x${string}`) {}
+  private load(): StaticBackend {
+    const mtime = existsSync(this.path) ? statSync(this.path).mtimeMs : 0;
+    if (mtime !== this.mtime) {
+      this.inner = new StaticBackend(mtime ? JSON.parse(readFileSync(this.path, "utf8")) : {});
+      this.inner.set(this.self, this.selfAddress);
+      this.mtime = mtime;
+    }
+    return this.inner;
+  }
+  resolve(name: string): Promise<Resolved | null> { return this.load().resolve(name); }
+  reverse(address: `0x${string}`): Promise<string | null> { return this.load().reverse(address); }
+}
+
 export default function agentNetwork(pi: ExtensionAPI) {
   const name = process.env.AGENT_NAME;
   if (!process.env.AGENT_HOME || !name) throw new Error("agent-network: AGENT_HOME and AGENT_NAME must be set");
   const keystore = loadOrCreateKeystore();
-  const contactsPath = join(keystore.home, "names.json");
-  const contacts = new StaticBackend(existsSync(contactsPath) ? JSON.parse(readFileSync(contactsPath, "utf8")) : {});
-  contacts.set(name, keystore.address);
-  const resolver = new Resolver({ backends: [contacts] });
+  const contacts = new NamesFile(join(keystore.home, "names.json"), name, keystore.address);
+  const resolver = new Resolver({ backends: [contacts], ttlMs: 10_000 });
   const env = (process.env.XMTP_ENV ?? "dev") as XmtpEnv;
 
   let transport: Transport | undefined;
@@ -74,7 +90,7 @@ export default function agentNetwork(pi: ExtensionAPI) {
     if (!trigger || trigger.role !== "custom" || trigger.customType !== "network" || typeof trigger.content !== "string") return;
     if (nudged.has(trigger.content)) return;
     const who = /^\[network\] (\S+) in /.exec(trigger.content)?.[1];
-    if (!who) return;
+    if (!who || who.toLowerCase() === "keeper" || who.toLowerCase() === (process.env.KEEPER_ADDRESS ?? "keeper").toLowerCase()) return;
     let sent = false;
     let answer = "";
     for (const m of messages.slice(i + 1)) {
@@ -89,7 +105,7 @@ export default function agentNetwork(pi: ExtensionAPI) {
     pi.sendMessage(
       {
         customType: "network-nudge",
-        content: `[network] delivery check: ${who} did not receive your last answer because it was plain text, not a send. If it was meant for ${who}, call send now with that answer. If no reply is needed, do nothing.`,
+        content: `[network] delivery check: your last message was plain text, so ${who} did not receive it. If ${who} asked you something and that text was the answer, call send now with it. If ${who} did not ask you anything, do nothing — do not acknowledge.`,
         display: true,
       },
       { triggerTurn: true, deliverAs: "followUp" },
