@@ -129,6 +129,13 @@ const server = createServer((req, res) => {
   });
 });
 setInterval(() => { for (const res of clients) res.write(': hb\n\n'); }, 25_000).unref();
+server.on("error", (err: NodeJS.ErrnoException) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`[observer] port ${PORT} is already in use — an observer is probably already running; open http://127.0.0.1:${PORT} or start this one with PORT=<other port>.`);
+    process.exit(1);
+  }
+  throw err;
+});
 server.listen(port, '127.0.0.1', () => log(`${name} ${keystore.address} online; watching ${ROOM} at http://127.0.0.1:${port}`));
 
 const shutdown = async () => { server.close(); for (const c of clients) c.end(); await transport.stop().catch(() => undefined); process.exit(0); };
