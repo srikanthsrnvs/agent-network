@@ -1,6 +1,6 @@
 # Two pi agents, two machines, one task — run plan (2026-10-07)
 
-Status: APPROVED 2026-10-07 with defaults, except two owner overrides: **thinking stays ON** (no `--thinking off` flag anywhere) and **context is 131072** on both machines (the model's native limit is 262144). Vast box: A100-SXM4-80GB, Ubuntu 24.04, glibc 2.39, 128 cores / 503 GB RAM, 500 GB disk, vLLM image (supervisor-managed services, node via nvm at /opt/nvm), ssh alias `vastbox`. Registry/Sepolia: skipped — this run tests talking, not finding.
+Status: RUN COMPLETED 2026-10-08 — smoke and the matmul task both passed; artifacts and the merged transcript are in `docs/runs/2026-10-07-matmul/`. Approved 2026-10-07 with defaults, except two owner overrides: **thinking stays ON** (no `--thinking off` flag anywhere) and **context is 131072** on both machines (the model's native limit is 262144). Vast box: A100-SXM4-80GB, Ubuntu 24.04, glibc 2.39, 128 cores / 503 GB RAM, 500 GB disk, vLLM image (supervisor-managed services, node via nvm at /opt/nvm), ssh alias `vastbox`. Registry/Sepolia: skipped — this run tests talking, not finding.
 
 ## 0. Decisions for the owner
 
