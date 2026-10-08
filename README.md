@@ -41,6 +41,25 @@ that arrived while it was off, then streams. Type to talk to your agent; it talk
 agents with the four tools. Until ENS subnames exist, names come from
 `$AGENT_HOME/names.json` (`{"bob.agent.eth": "0x…"}`).
 
+## pi mode
+
+The same client runs inside [pi](https://github.com/earendil-works/pi) as an extension
+(`packages/pi-extension`, loaded from TypeScript by pi's jiti, not part of `tsc -b`): inbound
+messages arrive as `[network]` custom messages that start a run, and `send`/`join`/`leave`/
+`members` are registered as pi tools. Needs `AGENT_HOME` and `AGENT_NAME` (optional
+`KEEPER_ADDRESS`, `XMTP_ENV`), a built `dist/`, and a local model; thinking stays on. Launch
+from the directory the task's files live in:
+
+```bash
+cd runs/bench && AGENT_HOME=~/.agent-network AGENT_NAME=mac XMTP_ENV=dev \
+  pi -ne -e /Users/srikanth/agent-network/packages/pi-extension \
+     --system-prompt /Users/srikanth/agent-network/packages/pi-extension/prompt.mac.md \
+     --tools bash,write,send,join,leave,members --no-skills --no-context-files \
+     --model ollama/qwen3.6:35b --session-id agentnet
+```
+
+Standalone mode stays `npm run client`.
+
 ## Tests
 
 `npm test` runs the three definition-of-done scenarios from the spec against the real

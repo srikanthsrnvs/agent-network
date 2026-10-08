@@ -39,12 +39,21 @@ export function createTools({ transport, resolver, keeper }: ToolDeps) {
           return { ok: true, to: `room:${room.name}` };
         }
         const who = await resolver.resolve(target);
-        if (!who) return { ok: false, error: `"${target}" is neither a room you are in nor a name that resolves` };
+        if (!who) {
+          return {
+            ok: false,
+            error: `"${target}" is neither a room you are in nor a known agent name; use the agent name your owner gave you (mac/vast) or a 0x address`,
+          };
+        }
         if (!(await transport.canMessage(who.address))) {
           return { ok: false, error: `${who.name} has no agent inbox on the network` };
         }
         await transport.sendDm(who.address, text);
-        return { ok: true, to: who.name };
+        return {
+          ok: true,
+          to: who.name,
+          note: 'delivered. Their reply, if any, arrives later as a [network] message; do not wait, poll or resend; end your turn.',
+        };
       },
     }),
 
