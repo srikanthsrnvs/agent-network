@@ -224,3 +224,14 @@ About half a day hands-on if Vast ssh arrives early; start the box and the model
 - feasibility #6, completeness #5 (message ids in Transport): moot, transcript logger and Step B dropped.
 - pi-integration's `steer` + `steeringMode:"all"`: still `followUp`; a 9-message task never bursts.
 - `settings.json` (`defaultThinkingLevel`) dropped: `` is in the only launch command.
+
+## Rooms — live results (2026-10-08)
+
+Keeper running on the Mac (`tmux` window `keeper`, `~/.agent-network-keeper`, address in `runs/keeper.address`); every agent has `keeper` in its `names.json` and `KEEPER_ADDRESS` in its env.
+
+- mac `join lab-20261007` → keeper created the group and added mac (`asked the keeper to add you…`, keeper log `joined`).
+- mac DM'd vast to join; vast `join` → keeper added it; vast received `[network] keeper in a direct message: added you to lab-20261007` and `[network] you are now in room "lab-20261007"`.
+- mac `members lab-20261007` → mac, keeper, vast, all `reachable: true`.
+- mac `send` into the room → vast received `[network] mac in room "lab-20261007": …` and answered in the room; mac received `[network] vast in room "lab-20261007": NVIDIA A100-SXM4-80GB`. ~8 s on vast's side including model time.
+- Bug found and fixed: the delivery nudge fired on the keeper's "added you" notification and made the unattended agent send three acknowledgements to the keeper. The nudge now ignores keeper messages and tells the model not to acknowledge when nothing was asked; the prompts explain the keeper is a service.
+- `names.json` is now re-read on change, so a new agent (vast2) only needs its line added on each machine — no restarts.
