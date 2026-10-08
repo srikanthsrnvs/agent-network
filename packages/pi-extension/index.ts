@@ -61,6 +61,7 @@ export default function agentNetwork(pi: ExtensionAPI) {
     const where = m.room ? `room "${m.room}"` : "a direct message";
     const when = m.missed ? ` (arrived ${m.sentAt.toISOString()} while you were away)` : "";
     const content = `[network] ${who} in ${where}${when}: ${m.text}`;
+    lastNetwork = Date.now();
     inflight.set(content, { repushed: false });
     network(content, { triggerTurn: true, deliverAs: "followUp" });
   };
@@ -143,11 +144,33 @@ export default function agentNetwork(pi: ExtensionAPI) {
         }
         const abortSignal = AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : [])]);
         const result = await tools[toolName].execute!(params as never, { toolCallId, messages: [], abortSignal });
+        if (toolName === "send" && (result as { ok?: boolean }).ok) lastNetwork = Date.now();
         return { content: [{ type: "text", text: JSON.stringify(result) }], details: undefined };
       },
     });
 
+  // Multi-day runs: an event-driven group with every agent idle never wakes up by itself. When
+  // AGENT_HEARTBEAT_MINUTES is set, an idle agent that has seen no network traffic for that long
+  // gets a [heartbeat] message so it can check its jobs or pick the next piece of work.
+  const heartbeatMs = Number(process.env.AGENT_HEARTBEAT_MINUTES ?? 0) * 60_000;
+  let lastNetwork = Date.now();
+  let running = false;
+  pi.on("agent_start", () => { running = true; });
+  pi.on("agent_settled", () => { running = false; });
+  let heartbeat: NodeJS.Timeout | undefined;
+
   pi.on("session_start", async () => {
+    if (heartbeatMs > 0 && !heartbeat) {
+      heartbeat = setInterval(() => {
+        if (running || Date.now() - lastNetwork < heartbeatMs) return;
+        lastNetwork = Date.now();
+        const quiet = Math.round(heartbeatMs / 60_000);
+        pi.sendMessage(
+          { customType: "heartbeat", content: `[heartbeat] ${quiet} minutes with no network activity while you were idle. Check any job you have running on the training machine, chase anything you are waiting on, or start the next most useful experiment. Results, not small talk.`, display: true },
+          { triggerTurn: true },
+        );
+      }, 60_000);
+    }
     transport ??= await Transport.start({
       keystore,
       env,
@@ -162,6 +185,7 @@ export default function agentNetwork(pi: ExtensionAPI) {
   });
 
   pi.on("session_shutdown", async () => {
+    if (heartbeat) { clearInterval(heartbeat); heartbeat = undefined; }
     const t = transport;
     transport = tools = undefined;
     if (!t) return;

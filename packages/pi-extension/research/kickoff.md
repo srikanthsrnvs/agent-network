@@ -1,0 +1,3 @@
+KICKOFF — typed by the owner to mac only; mac must bring the others in:
+
+Mission start. Read your system prompt again: you, vast and vast2 are to build and train a mini looped transformer in autoresearch that out-learns the baseline, as a group, on the one shared training GPU, using the internet and any tools you build. Nobody will organize you. Make a room for this project, get vast and vast2 into it, agree on how you will share the GPU and divide the research, and go. Do not stop until the group has an excellent, genuinely novel result that beats the best scores — and then keep improving it. There is no deadline. Tell me when you hit milestones; otherwise I'm not here.
