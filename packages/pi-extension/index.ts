@@ -202,6 +202,29 @@ export default function agentNetwork(pi: ExtensionAPI) {
   };
   pi.on("session_compact", ({ reason }) => pushMemory(`context was just compacted (${reason}); your long-term memory, re-read`, { deliverAs: "steer" }));
 
+  // If the inbound stream dies, rebuild the transport in-process; catch-up replays what was missed.
+  let restarting = false;
+  const startTransport = () =>
+    Transport.start({
+      keystore,
+      env,
+      onInbound: push,
+      onJoined: (g) => network(`[network] you are now in room "${g.name}"`),
+      onStreamError: async () => {
+        if (restarting) return;
+        restarting = true;
+        process.stderr.write("[agent-network] stream died; restarting transport\n");
+        try {
+          await transport?.stop().catch(() => undefined);
+          transport = await startTransport();
+          if (tools) tools = createTools({ transport, resolver, keeper: process.env.KEEPER_ADDRESS ?? "keeper" });
+          process.stderr.write("[agent-network] transport restarted\n");
+        } finally {
+          restarting = false;
+        }
+      },
+    });
+
   pi.on("session_start", async () => {
     pushMemory("session start; your long-term memory");
     if (heartbeatMs > 0 && !heartbeat) {
@@ -216,12 +239,7 @@ export default function agentNetwork(pi: ExtensionAPI) {
         );
       }, 60_000);
     }
-    transport ??= await Transport.start({
-      keystore,
-      env,
-      onInbound: push,
-      onJoined: (g) => network(`[network] you are now in room "${g.name}"`),
-    });
+    transport ??= await startTransport();
     if (!tools) {
       tools = createTools({ transport, resolver, keeper: process.env.KEEPER_ADDRESS ?? "keeper" });
       for (const toolName of Object.keys(schemas) as ToolName[]) register(toolName, tools[toolName].description!);

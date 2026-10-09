@@ -32,6 +32,8 @@ export interface TransportOptions {
   onInbound: (msg: Inbound) => void | Promise<void>;
   /** Called when we've been added to a group (e.g. the keeper let us into a room). */
   onJoined?: (group: Group) => void | Promise<void>;
+  /** Called when the XMTP stream dies (the SDK's own retry does not always revive it). */
+  onStreamError?: (err: unknown) => void | Promise<void>;
 }
 
 type Identifier = { identifier: string; identifierKind: number };
@@ -80,9 +82,12 @@ export class Transport {
       // A dead stream is not recoverable from here: the SDK's own retry does not always
       // bring it back, and the process would keep running while receiving nothing. Let the
       // supervisor restart us; catch-up replays everything missed since the cursor.
-      if (process.env.AGENT_EXIT_ON_STREAM_ERROR === '1' && String(err).includes('AgentStreamingError')) {
-        console.error('[xmtp] stream died; exiting for restart');
-        process.exit(2);
+      if (String(err).includes('AgentStreamingError')) {
+        if (process.env.AGENT_EXIT_ON_STREAM_ERROR === '1') {
+          console.error('[xmtp] stream died; exiting for restart');
+          process.exit(2);
+        }
+        void this.opts.onStreamError?.(err);
       }
     });
 
