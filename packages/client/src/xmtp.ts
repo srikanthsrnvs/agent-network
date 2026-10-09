@@ -75,7 +75,16 @@ export class Transport {
 
     this.agent.on('text', (ctx) => void this.handleLive(ctx));
     this.agent.on('group', (ctx) => void this.opts.onJoined?.(ctx.conversation as Group));
-    this.agent.on('unhandledError', (err) => console.error('[xmtp] error:', err));
+    this.agent.on('unhandledError', (err) => {
+      console.error('[xmtp] error:', err);
+      // A dead stream is not recoverable from here: the SDK's own retry does not always
+      // bring it back, and the process would keep running while receiving nothing. Let the
+      // supervisor restart us; catch-up replays everything missed since the cursor.
+      if (process.env.AGENT_EXIT_ON_STREAM_ERROR === '1' && String(err).includes('AgentStreamingError')) {
+        console.error('[xmtp] stream died; exiting for restart');
+        process.exit(2);
+      }
+    });
 
     await this.agent.start();
     await this.catchUp();
