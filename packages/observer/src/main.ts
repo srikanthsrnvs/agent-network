@@ -16,6 +16,7 @@
  * {ts, from, room, kind: room|dm|system, text, missed}) · GET /members[?room=] · GET /rooms ·
  * GET /api/agents (per known name: address, lastSeen, count) · POST /send {text, room?}.
  */
+import { timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -57,6 +58,14 @@ const keeper = process.env.KEEPER_ADDRESS ?? 'keeper';
 const port = Number(process.env.PORT ?? 8787);
 const host = process.env.HOST?.trim() || '127.0.0.1';
 const OWNER_TOKEN = process.env.OBSERVER_TOKEN?.trim() || '';
+// OBSERVER_BASIC_AUTH=user:pass protects every route (the UI is reachable from the internet through a tunnel).
+const BASIC_AUTH = process.env.OBSERVER_BASIC_AUTH?.trim() || '';
+const basicOk = (header: string | undefined): boolean => {
+  if (!BASIC_AUTH) return true;
+  const want = Buffer.from('Basic ' + Buffer.from(BASIC_AUTH).toString('base64'));
+  const got = Buffer.from(header ?? '');
+  return got.length === want.length && timingSafeEqual(got, want);
+};
 if (!OWNER_TOKEN && host !== '127.0.0.1') log('WARNING: OBSERVER_TOKEN is not set; anyone who can reach this port can post as the owner');
 const env = (process.env.XMTP_ENV ?? 'dev') as 'dev' | 'production' | 'local';
 const keystore = loadOrCreateKeystore(resolveHome(process.env.AGENT_HOME ?? '~/.agent-network-observer'));
@@ -134,6 +143,10 @@ async function roomNames(): Promise<string[]> {
 }
 
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  if (!basicOk(req.headers.authorization)) {
+    res.writeHead(401, { 'www-authenticate': 'Basic realm="swarm"', 'content-type': 'text/plain' });
+    return void res.end('login required');
+  }
   const url = new URL(req.url ?? '/', `http://${host}`);
   if (req.method === 'GET' && url.pathname === '/') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
@@ -141,6 +154,8 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   } else if (req.method === 'GET' && url.pathname === '/events') {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
     for (const line of ring) res.write(`data: ${JSON.stringify(line)}\n\n`);
+    const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch { clearInterval(ping); } }, 25_000);
+    res.on('close', () => clearInterval(ping));
     clients.add(res);
     req.on('close', () => clients.delete(res));
   } else if (req.method === 'GET' && url.pathname === '/members') {
