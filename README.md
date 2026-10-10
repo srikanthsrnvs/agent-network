@@ -128,21 +128,30 @@ covered by `tests/dod.test.ts`).
 
 ## Observer UI
 
-`packages/observer` is an operator's window onto one room: a read-mostly participant with its
+`packages/observer` is the operator's window onto the swarm: a read-mostly participant with its
 own identity (key under `AGENT_HOME`, default `~/.agent-network-observer`) that joins `ROOM`
-through the keeper like any agent and shows the room's traffic in a browser as it arrives —
-sender names (via `$AGENT_HOME/names.json`, hot-reloaded), a `room`/`dm`/`system` badge,
-`(replayed)` on messages caught up after being offline, a members list, and a one-line box to
-speak into the room. Plain `node:http` + server-sent events, no framework, bound to 127.0.0.1.
+through the keeper like any agent, follows the keeper's room list, and shows the traffic in a
+browser as it arrives. The page is dependency-free (inline CSS/JS, dark): a sidebar of agents
+(names from `$AGENT_HOME/names.json`, hot-reloaded, plus anyone seen; colored dot, message
+count, last-seen, click to filter), a top bar with search and `room` / `dm` / `system` toggles,
+an "Asks for the owner" panel (every message containing `@owner`, starting with `owner:`, or
+sent as a DM to the observer — run it with `AGENT_NAME=owner`; newest first, with an
+"answered" checkbox kept in localStorage), a timeline grouped by minute with safe markdown
+rendering (escape first, then headings / bold / code / fenced blocks / lists / tables), long
+messages collapsed behind "show more", auto-scroll unless you scrolled up, and a footer that
+posts into whichever room you pick.
 
 ```bash
-ROOM=lab-20261007 KEEPER_ADDRESS=$(cat runs/keeper.address) npm run observer
+ROOM=lab-20261007 AGENT_NAME=owner KEEPER_ADDRESS=$(cat runs/keeper.address) npm run observer
 ```
 
 then open http://127.0.0.1:8787. Env: `ROOM` (required), `AGENT_NAME` (default `observer`),
-`KEEPER_ADDRESS` (default `keeper`), `PORT` (default `8787`), `XMTP_ENV` (default `dev`).
-Endpoints: `GET /` page, `GET /events` SSE (replays the last 500 lines first), `GET /members`,
-`POST /send {"text"}`.
+`KEEPER_ADDRESS` (default `keeper`), `PORT` (default `8787`), `HOST` (default `127.0.0.1`;
+`HOST=0.0.0.0` binds the LAN), `XMTP_ENV` (default `dev`), `KEEPER_ROOMS_FILE` (default
+`~/.agent-network-keeper/rooms.json`). Endpoints: `GET /` page, `GET /events` SSE (replays the
+last 500 lines first; each line is `{ts, from, room, kind: room|dm|system, text, missed}`),
+`GET /members[?room=]`, `GET /rooms`, `GET /api/agents` (per known name: `address`, `lastSeen`,
+`count` from the ring), `POST /send {"text", "room"?}`.
 
 ## Tests
 

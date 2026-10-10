@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Run a shell command inside the codex sandbox on the Threadripper (ssh swarmbox, see codex/setup.sh).
+# Usage: codex/bin/sc 'cmd ...'   — long jobs: codex/bin/sc "tmux new -d -s job 'cmd'"
+set -uo pipefail
+for attempt in 1 2 3; do
+  ssh -o ConnectTimeout=20 swarmbox "$(printf '%q' "$*")"; rc=$?
+  [ $rc -ne 255 ] && exit $rc      # 255 = ssh/tunnel failure; anything else is the command's own exit code
+  sleep 15
+done
+echo "sc: the box is unreachable (ssh failed 3 times)" >&2; exit 255

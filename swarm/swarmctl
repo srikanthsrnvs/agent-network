@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# Host-side control of the swarm sandboxes on the Threadripper. One Docker container per agent,
+# both GPUs, host network, cgroup CPU/RAM caps, only its own identity mounted. Runs as srikanth.
+# --init: docker-init is PID 1 so orphaned children of agent tools get reaped (sleep infinity does not).
+#   swarmctl build                      build the image from ~/agent-network
+#   swarmctl create <name|all>          create (or recreate with --recreate) the container(s)
+#   swarmctl start|stop|restart <name|all>
+#   swarmctl launch <name|all>          start pi inside the container (tmux session "pi"); staggered for all
+#   swarmctl screen <name> [lines]      what pi shows right now
+#   swarmctl say <name> "<text>"        type a line into pi (owner message); long text: say-file
+#   swarmctl say-file <name> <file>     copy a file in and tell pi to read it (TUI swallows long pastes)
+#   swarmctl attach <name>              interactive attach (detach: ctrl-b d)
+#   swarmctl shell <name>               bash inside the sandbox
+#   swarmctl limits <name> <mem> <cpus> e.g. limits gale 110g 24   (live; recorded in limits.conf)
+#   swarmctl status                     containers, limits, GPU, RAM, locks
+#   swarmctl kill-pi <name>             stop pi (tmux session) but keep the container
+set -euo pipefail
+SWARM=${SWARM_DIR:-$HOME/swarm}
+REPO=${REPO:-$HOME/agent-network}
+IMAGE=swarm-agent
+NAMES=(ada bram cato dara eno fife gale hiro ida jax)
+[ -f "${SWARM_DIR:-$HOME/swarm}/agents.txt" ] && mapfile -t NAMES < <(grep -v '^\s*$' "${SWARM_DIR:-$HOME/swarm}/agents.txt")   # append-only: port ranges follow the order
+MODEL=${MODEL:-deepseek/deepseek-v4-pro}
+PI_EXT=/opt/agent-network/packages/pi-extension
+TOOLS=read,bash,edit,write,grep,find,ls,send,join,leave,members
+KEEPER_ADDRESS=$(tr -d '[:space:]' < "$SWARM/keeper/address")
+LIMITS="$SWARM/limits.conf"   # lines: name mem cpus
+[ -f "$LIMITS" ] || cat > "$LIMITS" <<'L'
+ada 40g 16
+bram 64g 16
+cato 64g 16
+dara 64g 16
+eno 48g 16
+fife 48g 16
+gale 110g 24
+hiro 110g 24
+ida 40g 16
+jax 40g 16
+L
+die() { echo "swarmctl: $*" >&2; exit 1; }
+names_of() { if [ "$1" = all ]; then echo "${NAMES[@]}"; else for n in "$@"; do printf '%s\n' "${NAMES[@]}" | grep -qx "$n" || die "unknown agent $n"; done; echo "$@"; fi; }
+limit_of() { awk -v n="$1" -v f="$2" '$1==n { print (f=="mem" ? $2 : $3) }' "$LIMITS"; }
+port_base() { local i=0; for n in "${NAMES[@]}"; do [ "$n" = "$1" ] && echo $((9100 + i * 100)) && return; i=$((i+1)); done; }
+cname() { echo "swarm-$1"; }
+exists() { docker container inspect "$(cname "$1")" >/dev/null 2>&1; }
+running() { [ "$(docker container inspect -f '{{.State.Running}}' "$(cname "$1")" 2>/dev/null)" = true ]; }
+
+cmd=${1:-}; shift || true
+case "$cmd" in
+  build)
+    cd "$REPO" && docker build -t "$IMAGE" --build-arg UID="$(id -u)" -f swarm/Dockerfile . ;;
+  create)
+    recreate=0; [ "${1:-}" = --recreate ] && { recreate=1; shift; }
+    for n in $(names_of "$@"); do
+      c=$(cname "$n")
+      if exists "$n"; then
+        [ $recreate = 1 ] || { echo "$c exists (use --recreate to rebuild it; /swarm/me and ~/.pi persist on the host)"; continue; }
+        docker rm -f "$c" >/dev/null && echo "removed $c"
+      fi
+      mkdir -p "$SWARM/$n"/{home,memory,work,pi/agent,pi/agent/extensions,.ccache} "$SWARM/shared"/{models,builds,hf,extensions,status,locks} "$SWARM/prompts"
+      [ -f "$SWARM/$n/home/key" ] || die "no identity at $SWARM/$n/home/key"
+      [ -f "$SWARM/$n/pi/agent/models.json" ] || cp "$SWARM/pi-seed/models.json" "$SWARM/$n/pi/agent/models.json"
+      [ -f "$SWARM/$n/pi/agent/settings.json" ] || cp "$SWARM/pi-seed/settings.json" "$SWARM/$n/pi/agent/settings.json"
+      docker run -d --name "$c" --hostname "$n" --restart unless-stopped --init \
+        --gpus all --network host --shm-size 16g --ulimit memlock=-1:-1 --pids-limit 8192 \
+        --memory "$(limit_of "$n" mem)" --memory-swap "$(limit_of "$n" mem)" --cpus "$(limit_of "$n" cpus)" \
+        --env-file "$SWARM/env" \
+        -e AGENT_HOME=/swarm/me/home -e AGENT_NAME="$n" -e AGENT_UNATTENDED=1 -e AGENT_HEARTBEAT_MINUTES="${AGENT_HEARTBEAT_MINUTES:-20}" \
+        -e KEEPER_ADDRESS="$KEEPER_ADDRESS" -e XMTP_ENV=dev -e SWARM_PORT_BASE="$(port_base "$n")" \
+        --add-host "$n:127.0.0.1" -e MAKEFLAGS="-j$(limit_of "$n" cpus)" -e CMAKE_BUILD_PARALLEL_LEVEL="$(limit_of "$n" cpus)" -e OMP_NUM_THREADS="$(limit_of "$n" cpus)" -e SWARM_CPUS="$(limit_of "$n" cpus)" \
+        -v "$SWARM/$n:/swarm/me" -v "$SWARM/$n/pi:/home/agent/.pi" -v "$SWARM/shared:/swarm/shared" -v "$SWARM/prompts:/swarm/prompts:ro" \
+        "$IMAGE" >/dev/null
+      echo "created $c (mem $(limit_of "$n" mem), cpus $(limit_of "$n" cpus), ports $(port_base "$n")-$(( $(port_base "$n") + 99 )))"
+    done ;;
+  start|stop|restart)
+    for n in $(names_of "$@"); do docker "$cmd" "$(cname "$n")" >/dev/null && echo "$cmd $(cname "$n")"; done ;;
+  launch)
+    first=1
+    for n in $(names_of "$@"); do
+      c=$(cname "$n"); running "$n" || die "$c is not running"
+      [ -f "$SWARM/prompts/$n.md" ] || die "no prompt at $SWARM/prompts/$n.md"
+      if docker exec -u agent "$c" tmux has-session -t pi 2>/dev/null; then echo "$n: pi already running"; continue; fi
+      [ $first = 1 ] || sleep "${STAGGER:-20}"; first=0
+      docker exec -d -u agent -w /swarm/me/work "$c" tmux new -d -s pi -x 200 -y 50 \
+        "pi -e $PI_EXT --system-prompt /swarm/prompts/$n.md --tools $TOOLS --no-context-files --model $MODEL --session-id swarm 2>>/swarm/me/pi.stderr.log; echo 'pi exited'; sleep 999999"
+      echo "launched pi in $c"
+    done ;;
+  screen)   docker exec -u agent "$(cname "$1")" tmux capture-pane -p -t pi -S "-${2:-60}" ;;
+  say)      docker exec -u agent "$(cname "$1")" tmux send-keys -t pi -l "$2"; sleep 0.3; docker exec -u agent "$(cname "$1")" tmux send-keys -t pi Enter ;;
+  say-file) cp "$2" "$SWARM/$1/work/owner-message.md"; "$0" say "$1" "Owner message in the file owner-message.md in your work dir: read it now and act on it." ;;
+  attach)   docker exec -it -u agent "$(cname "$1")" tmux attach -t pi ;;
+  shell)    docker exec -it -u agent -w /swarm/me/work "$(cname "$1")" bash ;;
+  kill-pi)  docker exec -u agent "$(cname "$1")" tmux kill-session -t pi && echo "pi stopped in $(cname "$1")" ;;
+  limits)
+    n=$1; mem=$2; cpus=$3; names_of "$n" >/dev/null
+    docker update --memory "$mem" --memory-swap "$mem" --cpus "$cpus" "$(cname "$n")" >/dev/null
+    awk -v n="$n" -v m="$mem" -v c="$cpus" '$1==n {$2=m; $3=c} {print}' "$LIMITS" > "$LIMITS.tmp" && mv "$LIMITS.tmp" "$LIMITS"
+    echo "$n: mem $mem cpus $cpus" ;;
+  status)
+    docker ps -a --filter name=swarm- --format 'table {{.Names}}\t{{.Status}}' ; echo
+    docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.PIDs}}' $(docker ps --filter name=swarm- -q) 2>/dev/null || true; echo
+    for n in "${NAMES[@]}"; do running "$n" && { docker exec -u agent "$(cname "$n")" tmux has-session -t pi 2>/dev/null && echo "$n: pi running" || echo "$n: pi NOT running"; }; done; echo
+    nvidia-smi --query-gpu=index,memory.used,memory.total,utilization.gpu --format=csv,noheader; free -g | head -2
+    "$SWARM/shared/gpuclaim.sh" status 2>/dev/null || true ;;
+  *) sed -n '2,20p' "$0"; exit 1 ;;
+esac

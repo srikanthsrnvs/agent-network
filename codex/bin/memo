@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# OptMem inside the codex sandbox: memo wake | note "<line>" | nap <a-b> "<summary>" | recall <regex> | zoom <a-b>
+set -uo pipefail
+q=""; for a in "$@"; do q+=" $(printf '%q' "$a")"; done
+exec "$(dirname "$0")/sc" "/home/agent/.optmem/memo$q"
