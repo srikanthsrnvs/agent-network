@@ -32,7 +32,8 @@ def post(path, body, timeout):
     host, tok = env()
     data = json.dumps(body).encode()
     req = urllib.request.Request(f"https://{host}{path}", data=data, method="POST",
-                                 headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
+                                 headers={"User-Agent": "swarm-sc/1.0",  # Cloudflare blocks the default Python-urllib agent
+                 "Authorization": f"Bearer {tok}", "Content-Type": "application/json"})
     last = None
     for attempt in range(1, ATTEMPTS + 1):
         try:
