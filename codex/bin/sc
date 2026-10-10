@@ -5,7 +5,7 @@ Usage:  codex/bin/sc '<cmd ...>'                 all args are joined by spaces i
         codex/bin/sc --upload <local-file> <remote-path>   ship a file into the sandbox (/swarm/me/..., /swarm/shared/..., /tmp/...)
 Env:    SWARM_GATEWAY_HOST   e.g. words-words-words.trycloudflare.com   (required)
         CODEX_GATEWAY_TOKEN  bearer token for the "codex" sandbox          (required, secret)
-        SC_TIMEOUT           remote timeout in seconds (default 600, max 3600)
+        SC_TIMEOUT           remote timeout in seconds (default 90, max 3600)
 Each call is ONE HTTPS POST: the gateway runs `bash -lc <cmd>` in swarm-codex (cwd /swarm/me/work, user agent) and
 returns exit code, stdout, stderr. stdout/stderr are relayed, the exit code becomes this process's exit code
 (124 = remote timeout). Network/gateway failures are retried 3 times with 15 s pauses, then exit 255.

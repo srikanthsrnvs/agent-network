@@ -2,6 +2,9 @@
 # Host-side control of the swarm sandboxes on the Threadripper. One Docker container per agent,
 # both GPUs, host network, cgroup CPU/RAM caps, only its own identity mounted. Runs as srikanth.
 # --init: docker-init is PID 1 so orphaned children of agent tools get reaped (sleep infinity does not).
+# --device nvidia.com/gpu=all (CDI, /etc/cdi/nvidia.yaml from `nvidia-ctk cdi generate`) instead of --gpus all:
+#   with --gpus, any `systemctl daemon-reload` on the host revokes the GPUs inside running containers
+#   ("Failed to initialize NVML: Unknown Error"); CDI passes the device nodes explicitly and survives it.
 #   swarmctl build                      build the image from ~/agent-network
 #   swarmctl create <name|all>          create (or recreate with --recreate) the container(s)
 #   swarmctl start|stop|restart <name|all>
@@ -62,7 +65,7 @@ case "$cmd" in
       [ -f "$SWARM/$n/pi/agent/models.json" ] || cp "$SWARM/pi-seed/models.json" "$SWARM/$n/pi/agent/models.json"
       [ -f "$SWARM/$n/pi/agent/settings.json" ] || cp "$SWARM/pi-seed/settings.json" "$SWARM/$n/pi/agent/settings.json"
       docker run -d --name "$c" --hostname "$n" --restart unless-stopped --init \
-        --gpus all --network host --shm-size 16g --ulimit memlock=-1:-1 --pids-limit 8192 \
+        --device nvidia.com/gpu=all --network host --shm-size 16g --ulimit memlock=-1:-1 --pids-limit 8192 \
         --memory "$(limit_of "$n" mem)" --memory-swap "$(limit_of "$n" mem)" --cpus "$(limit_of "$n" cpus)" \
         --env-file "$SWARM/env" \
         -e AGENT_HOME=/swarm/me/home -e AGENT_NAME="$n" -e AGENT_UNATTENDED=1 -e AGENT_HEARTBEAT_MINUTES="${AGENT_HEARTBEAT_MINUTES:-20}" \

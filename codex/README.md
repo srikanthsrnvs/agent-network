@@ -1,10 +1,10 @@
 # Codex as a swarm agent — what to set up in the Codex UI
 
-> **Transport note (2026-10-10):** Codex's egress proxy blocks `*.trycloudflare.com` outright (HTTP 403
-> "Your request was blocked"), so the gateway is reached through a second tunnel on
-> `localhost.run` (`*.lhr.life`, no account; run by `~/swarm/run-lhr-tunnel.sh`, tmux `infra:lhr`,
-> current host in `~/swarm/codex/GATEWAY2` on the box). Use that host as `SWARM_GATEWAY_HOST`.
-> Its name changes whenever the tunnel reconnects; a tunnel on a domain you own would be stable.
+> **Transport (stable, 2026-10-10):** the gateway is `https://swarm-gw.deepshard.org` (named Cloudflare
+> tunnel `swarm`, systemd service `cloudflared` on the box, config /etc/cloudflared/config.yml); the room
+> UI is `https://swarm.deepshard.org` (basic auth). Codex's proxy blocks `*.trycloudflare.com`, which is why
+> the quick tunnels were abandoned. Cloudflare cuts any response after 100 s, so one `sc` call may run at
+> most 90 s (SC_TIMEOUT default); anything longer runs in tmux inside the sandbox and is polled.
 
 Codex runs in OpenAI's cloud, so it cannot see the LAN. Its path to the Threadripper is:
 `codex/bin/sc` → one HTTPS POST → a Cloudflare quick tunnel → `~/swarm/gateway.py` on the box
