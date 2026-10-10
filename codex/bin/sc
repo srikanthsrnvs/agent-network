@@ -71,7 +71,7 @@ def main(argv):
         print(f"uploaded {res.get('bytes')} bytes to {remote} (mode {mode})"); return 0
     cmd = " ".join(argv)
     try:
-        timeout = max(1, min(int(os.environ.get("SC_TIMEOUT") or 600), 3600))
+        timeout = max(1, min(int(os.environ.get("SC_TIMEOUT") or 90), 3600))
     except ValueError:
         die("SC_TIMEOUT must be an integer number of seconds", 2)
     res = post("/exec", {"cmd": cmd, "timeout": timeout}, timeout=timeout + 60)
