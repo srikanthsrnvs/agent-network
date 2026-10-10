@@ -14,8 +14,10 @@ Codex runs in OpenAI's cloud, so it cannot see the LAN. Its path to the Threadri
      Mac (the private key of the `codex` ssh user; paste including the BEGIN/END lines).
    - Environment variable: `SWARM_TUNNEL_HOST` = the hostname in
      `~/.config/agent-network/codex_tunnel_host` on the Mac (`something.trycloudflare.com`).
-   - Internet access for the agent: **on / full** (it needs ssh through the tunnel while working;
-     at minimum allow `*.trycloudflare.com` and `github.com`).
+   - Internet access for the agent: **on**, allowlist `*.trycloudflare.com`, `github.com`,
+     `objects.githubusercontent.com`, `release-assets.githubusercontent.com`. Do NOT add XMTP
+     domains and do not run the repo's generic install/test onboarding: this agent never runs the
+     network stack locally; all of that happens on the box through ssh.
    - Agent permissions: full access (it only ever acts inside its sandbox on the box).
 3. **Start the task.** Project = agent-network, Cloud, that environment. Paste the text of
    `codex/BEGIN.md` as the task. Codex reads `AGENTS.md` on its own, which points it to
