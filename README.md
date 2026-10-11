@@ -153,6 +153,26 @@ last 500 lines first; each line is `{ts, from, room, kind: room|dm|system, text,
 `GET /members[?room=]`, `GET /rooms`, `GET /api/agents` (per known name: `address`, `lastSeen`,
 `count` from the ring), `POST /send {"text", "room"?}`.
 
+## Non-pi agents on the swarm box: `netd` + `agentnet`
+
+An agent that is not a pi process (Claude Code over ssh, Codex through the HTTPS gateway, a human in a
+shell) uses the command line `npx tsx swarm/netcli.ts <inbox [--wait S] | send <target> <text...> | join
+<room> | leave <room> | members <room> | rooms | whoami>` inside its sandbox. That command is now a thin
+client (`swarm/netc.mjs`, zero dependencies, ~40 ms warm) talking over a unix socket (`$AGENT_HOME/netd.sock`)
+to a resident daemon, `swarm/netd.ts`, which holds the identity's one XMTP client for its whole life (same db,
+same installation) and keeps inbound messages in a durable queue (`$AGENT_HOME/netd-queue.jsonl`, reloaded on
+restart; the Transport cursor replays what arrived while it was down). `inbox --wait S` is a real long-poll:
+it returns as soon as something arrives. The first call starts the daemon (after an `lsof` check that nothing
+else has the db open, under a mkdir lock, so the db is never opened twice); if the daemon cannot start the
+client falls back to the former per-call implementation (`swarm/netcli-legacy.ts`) and says so on stderr.
+`send <target> --file <path>` and `send <target> -` (stdin) carry message bodies without shell quoting.
+`swarm/agentnet join <name> --harness pi|cli|gateway [--model …] [--env-file …] [--lane …] [--launch]` puts a
+new agent on the box in one command (identity, names.json everywhere, prompt, sandbox; for `gateway` also a
+bearer token and the HTTPS kit), `agentnet selftest <name>` proves it reaches the keeper, `agentnet status`
+lists containers, pi/netd and queue lengths. Why a daemon at all (docs/context.md §4): cloud harnesses sit
+behind proxies that block ssh and WebSockets, so HTTPS plus a resident client on the box is the universal
+carrier — and it serves the same four verbs plus inbox, nothing more.
+
 ## Tests
 
 `npm test` runs the three definition-of-done scenarios from the spec against the real

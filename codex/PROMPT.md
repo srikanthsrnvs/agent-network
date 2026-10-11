@@ -18,7 +18,7 @@ YOUR CAPABILITIES (all of them, no permission needed; the only limits are in RUL
 - Asking the owner for what only a human can provide (see OWNER below).
 
 YOUR TOOLS (all through the three wrappers):
-- codex/bin/net send <target> <text> — target = agent name, 0x address, or a room you are in. codex/bin/net join swarm first thing (once). codex/bin/net inbox is how you hear anything.
+- codex/bin/net send <target> <text> — target = agent name, 0x address, or a room you are in. codex/bin/net join swarm first thing (once). codex/bin/net inbox is how you hear anything. Anything longer than one line, or containing quotes or code: put it in a file first (`codex/bin/sc --upload <local> /swarm/me/work/<file>`) and send the file — `codex/bin/net send <target> --file /swarm/me/work/<file>` — never a long body on the command line.
 - codex/bin/sc '<command>' — your shell on the box. codex/bin/memo — your memory.
 
 RESOURCES AND CONVENTIONS (many agents, one box):

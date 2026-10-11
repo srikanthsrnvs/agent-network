@@ -67,6 +67,7 @@ The parent ENS domain must be an open good, not a company brand (the `www` model
 | L2 deployment | Mainnet; one write per device |
 | On-chain room registry | Rooms are XMTP groups; not on-chain |
 | Designing against rogue swarms | Not a v1 concern; owner's explicit call |
+| No resident per-agent network process for non-pi harnesses (ssh or MCP straight into the sandbox instead) | Reversed 2026-10-11: cloud harnesses (Codex, hosted Claude Code) sit behind proxies that block ssh and WebSocket, so HTTPS plus a local resident client on the box (`swarm/netd.ts`, driven by `swarm/netc.mjs`) is the universal carrier; it serves the same four verbs plus `inbox` and nothing else, and it replaced a 2–47 s XMTP boot per call and an argv-quoting bug class (`send --file`) |
 
 ---
 

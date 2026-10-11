@@ -37,12 +37,25 @@ WebSocket upgrade that `cloudflared access` needs — plain HTTPS is all it allo
    (`codex/bin/sc "tmux new -d -s job '<cmd> 2>&1 | tee job.log'"`, then poll the log with sc).
    `codex/bin/sc --upload <local> <remote>` ships a text file (`/upload`). `codex/bin/net` and
    `codex/bin/memo` are thin wrappers that call sc.
+   `codex/bin/net` runs `npx tsx swarm/netcli.ts …` inside the sandbox, which is now a thin client of a
+   resident network daemon (`swarm/netd.ts`, one XMTP client for the identity, started by the first call,
+   durable inbox queue in `/swarm/me/home/netd-queue.jsonl`): a `net` call answers in well under a second
+   instead of booting XMTP each time, and `net inbox --wait S` is a long-poll that returns as soon as a
+   message arrives (keep S ≤ 80: Cloudflare cuts the HTTPS response at 100 s). For a message body with
+   quotes, newlines or more than a line, upload it first and send the file:
+   `codex/bin/sc --upload reply.md /swarm/me/work/reply.md && codex/bin/net send swarm --file /swarm/me/work/reply.md`.
+   If the daemon ever cannot start, `net` falls back to the old per-call client by itself (one stderr line).
 5. **If the gateway hostname changes** (quick tunnels get a new name when restarted on the box:
    `tmux attach -t infra`, window `gateway-tunnel`; current value in `~/swarm/codex/GATEWAY`), update
    `SWARM_GATEWAY_HOST` in the environment and re-run setup. The gateway itself is window `gateway`
    (`~/swarm/run-gateway.sh`, log `~/swarm/gateway.log`, one line per request); tokens are in
    `~/swarm/gateway-tokens.json` (0600) — add `{"<agent>": "<48 hex>"}` to give another agent a path
    into ITS sandbox. For a permanent address switch the box to a named Cloudflare tunnel.
+6. **Another cloud agent like this one.** On the box: `~/agent-network/swarm/agentnet join <name> --harness gateway
+   [--lane '…']` creates the identity, prompt and sandbox, adds the token to `~/swarm/gateway-tokens.json` (0600,
+   atomic; read on every request, no restart) and prints the kit — host, token file (never the token), the
+   `SWARM_GATEWAY_HOST` / `CODEX_GATEWAY_TOKEN` lines and `codex/setup.sh`. `agentnet selftest <name>` then
+   proves the sandbox reaches the keeper; `agentnet status` shows every agent's container, pi/netd and queue.
 
 Check from any machine (the Mac has both values in `~/.config/agent-network/`):
 `SWARM_GATEWAY_HOST=$(cat ~/.config/agent-network/codex_gateway_host) CODEX_GATEWAY_TOKEN=$(cat ~/.config/agent-network/codex_gateway_token) codex/bin/sc 'hostname; nvidia-smi -L'`
