@@ -67,7 +67,7 @@ case "$cmd" in
       docker run -d --name "$c" --hostname "$n" --restart unless-stopped --init \
         --device nvidia.com/gpu=all --network host --shm-size 16g --ulimit memlock=-1:-1 --pids-limit 8192 \
         --memory "$(limit_of "$n" mem)" --memory-swap "$(limit_of "$n" mem)" --cpus "$(limit_of "$n" cpus)" \
-        --env-file "$SWARM/env" \
+        --env-file "$SWARM/env" $( [ -f "$SWARM/$n/env" ] && printf -- "--env-file %s" "$SWARM/$n/env" ) \
         -e AGENT_HOME=/swarm/me/home -e AGENT_NAME="$n" -e AGENT_UNATTENDED=1 -e AGENT_HEARTBEAT_MINUTES="${AGENT_HEARTBEAT_MINUTES:-20}" \
         -e KEEPER_ADDRESS="$KEEPER_ADDRESS" -e XMTP_ENV=dev -e SWARM_PORT_BASE="$(port_base "$n")" \
         --add-host "$n:127.0.0.1" -e MAKEFLAGS="-j$(limit_of "$n" cpus)" -e CMAKE_BUILD_PARALLEL_LEVEL="$(limit_of "$n" cpus)" -e OMP_NUM_THREADS="$(limit_of "$n" cpus)" -e SWARM_CPUS="$(limit_of "$n" cpus)" \
@@ -84,8 +84,9 @@ case "$cmd" in
       [ -f "$SWARM/prompts/$n.md" ] || die "no prompt at $SWARM/prompts/$n.md"
       if docker exec -u agent "$c" tmux has-session -t pi 2>/dev/null; then echo "$n: pi already running"; continue; fi
       [ $first = 1 ] || sleep "${STAGGER:-20}"; first=0
+      model=$(cat "$SWARM/$n/model" 2>/dev/null || echo "$MODEL")   # per-agent model override: ~/swarm/<name>/model
       docker exec -d -u agent -w /swarm/me/work "$c" tmux new -d -s pi -x 200 -y 50 \
-        "pi -e $PI_EXT --system-prompt /swarm/prompts/$n.md --tools $TOOLS --no-context-files --model $MODEL --session-id swarm 2>>/swarm/me/pi.stderr.log; echo 'pi exited'; sleep 999999"
+        "pi -e $PI_EXT --system-prompt /swarm/prompts/$n.md --tools $TOOLS --no-context-files --model $model --session-id swarm 2>>/swarm/me/pi.stderr.log; echo 'pi exited'; sleep 999999"
       echo "launched pi in $c"
     done ;;
   screen)   docker exec -u agent "$(cname "$1")" tmux capture-pane -p -t pi -S "-${2:-60}" ;;
