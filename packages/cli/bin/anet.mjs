@@ -77,8 +77,9 @@ if (cmd === 'relay') {
     const idName = args[1];
     if (!idName || !/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(idName) || idName === '_admin') fail('usage: relay add-identity <name> [--home RELAY_HOME]', 2);
     const { loadOrCreateKeystore } = await import(pathToFileURL(keystoreModule).href);
-    mkdirSync(join(relayHome, 'tokens'), { recursive: true });
+    mkdirSync(join(relayHome, 'tokens'), { recursive: true, mode: 0o700 });
     const ks = loadOrCreateKeystore(join(relayHome, 'identities', idName));
+    for (const d of [join(relayHome, 'tokens'), join(relayHome, 'identities'), ks.home]) { try { chmodSync(d, 0o700); } catch { /* not ours to tighten */ } }
     const tokens = readTokens();
     const tokenFile = join(relayHome, 'tokens', `${idName}.token`);
     let token = Object.keys(tokens).find((t) => tokens[t] === idName);

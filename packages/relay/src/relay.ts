@@ -73,7 +73,7 @@ export async function startRelay(opts: RelayOptions): Promise<Relay> {
   const maxWait = opts.behindProxy ? 80 : 600;
   const since = new Date().toISOString();
   if (!opts.listen && !opts.socket) throw new Error('relay: give --listen host:port and/or --socket path');
-  mkdirSync(join(home, 'identities'), { recursive: true });
+  mkdirSync(join(home, 'identities'), { recursive: true, mode: 0o700 });
 
   const lock = new Lock(join(home, 'relay.lock'), log);
   lock.acquire();
