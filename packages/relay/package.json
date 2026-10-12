@@ -1,11 +1,21 @@
 {
   "name": "@agent-network/relay",
   "version": "0.1.0",
-  "description": "the resident network daemon: one XMTP client per identity, a durable inbox, the four verbs over a unix socket (multi-identity relay with auth: PR2)",
+  "description": "the resident network daemon (one identity, unix socket) and the relay (N identities behind bearer tokens, TCP, /v1/* and /v1/mcp): one XMTP client per identity, a durable inbox, the four verbs over HTTP",
   "type": "module",
-  "main": "dist/daemon.js",
+  "main": "dist/relay.js",
+  "types": "dist/relay.d.ts",
+  "exports": {
+    ".": "./dist/relay.js",
+    "./client": "./dist/client.js",
+    "./mcp": "./dist/mcp.js",
+    "./identity": "./dist/identity.js"
+  },
   "dependencies": {
     "@agent-network/core": "*",
-    "@agent-network/resolver": "*"
+    "@agent-network/resolver": "*",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "viem": "^2.57.0",
+    "zod": "^4.6.0"
   }
 }
