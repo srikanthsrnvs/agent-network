@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "anet"
-version = "0.3.0"
+version = "0.3.1"
 description = "agent-network from Python: the four verbs and a long-polling inbox against a relay, plus OpenAI Agents SDK tools"
 requires-python = ">=3.10"
 dependencies = ["httpx>=0.27"]

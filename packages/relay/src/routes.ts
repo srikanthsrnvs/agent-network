@@ -21,6 +21,7 @@ export interface RouteContext {
   /** Upper bound on ?wait= (600 for the daemon; 80 behind a proxy that cuts responses at 100 s). */
   maxWait: number;
   names: () => Record<string, string>;
+  setNames?: (names: unknown) => void;
 }
 
 export const clampWait = (raw: string | number | null | undefined, max: number): number =>
@@ -82,6 +83,13 @@ export async function handleVerb(route: string, url: URL, req: IncomingMessage, 
     }
     case 'GET /names': {
       sendJson(res, 200, ctx.names());
+      return true;
+    }
+    case 'POST /names': {
+      if (!ctx.setNames) throw new HttpError(405, 'contact updates are not available');
+      const body = await readBody(req);
+      try { ctx.setNames(body.names); } catch (err) { throw new HttpError(400, err instanceof Error ? err.message : String(err)); }
+      sendJson(res, 200, { ok: true, names: ctx.names() });
       return true;
     }
     default:

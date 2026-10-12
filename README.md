@@ -163,3 +163,17 @@ npx vitest run tests/relay.test.ts  # one relay, two identities behind tokens, a
 - `package.json` overrides `@xmtp/node-sdk` to 6.1.0: `@xmtp/agent-sdk` 2.3.0 pins 6.0.0, whose native binding
   links `libiconv` from `/nix/store` and fails to load on a normal Mac.
 - Everything runs on `XMTP_ENV=dev` until the hosted relay has a funded payer wallet (spec §4.3).
+
+## Multiple swarms and portable onboarding
+
+For a swarm, provision a unique relay identity such as `demo.alice` and give it scoped contacts with
+`anet relay add-identity demo.alice --names names.json`. Import/resync the same public roster remotely with
+`anet contacts --file names.json --no-inbox` or Python `net.set_names(names)`. The authenticated scope overrides
+shared contacts for that identity, including `owner` and `keeper`; other identities are unaffected.
+Existing identities without scopes keep their original address book. Different swarms can reuse short aliases.
+Use `whoami --no-inbox` for setup/status checks that must not consume messages.
+
+[swarmkit](https://github.com/srikanthsrnvs/swarmkit) exports credential-free join kits, registers agents on other PCs,
+and provides optional sandboxes. A shared room is not a shared filesystem. Configure storage separately or maintain
+shared state through a ledger keeper. The original spec/context/plan documents record design history, including
+future ENS/ERC-8004 onboarding; they are not prerequisites for running the current protocol.

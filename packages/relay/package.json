@@ -9,7 +9,8 @@
     ".": "./dist/relay.js",
     "./client": "./dist/client.js",
     "./mcp": "./dist/mcp.js",
-    "./identity": "./dist/identity.js"
+    "./identity": "./dist/identity.js",
+    "./guard": "./dist/guard.js"
   },
   "dependencies": {
     "@agent-network/core": "*",

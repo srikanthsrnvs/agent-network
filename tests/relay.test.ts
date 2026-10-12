@@ -8,7 +8,7 @@
  *   - no token → 401; the admin token lists identities, an identity token may not
  * Needs `npm run build` first (the relay and its MCP server are compiled TypeScript).
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -180,4 +180,41 @@ describe('relay', () => {
       await client.close();
     }
   }, 240_000);
+
+  it('isolates swarm contacts, routes owner to the scoped address, and preserves other identities', async () => {
+    const a = (await api<{ address: string }>(TOKENS.alice, 'GET', '/v1/whoami')).json.address;
+    const b = (await api<{ address: string }>(TOKENS.bob, 'GET', '/v1/whoami')).json.address;
+    const sharedFile = join(tmp, 'relay-home', 'names.json');
+    const original = readFileSync(sharedFile, 'utf8');
+    writeFileSync(sharedFile, JSON.stringify({ keeper: keeper.address, owner: a }));
+    try {
+      expect((await api(TOKENS.alice, 'POST', '/v1/names', { names: { owner: b, worker: b } })).status).toBe(200);
+      expect((await api<Record<string, string>>(TOKENS.alice, 'GET', '/v1/names')).json.owner).toBe(b);
+      expect((await api<Record<string, string>>(TOKENS.bob, 'GET', '/v1/names')).json.owner).toBe(a);
+      expect(JSON.parse(readFileSync(sharedFile, 'utf8')).owner).toBe(a);
+      expect((await api(TOKENS.alice, 'POST', '/v1/send', { target: 'owner', text: 'scoped owner request' })).status).toBe(200);
+      expect(await receive(TOKENS.bob, m => m.text === 'scoped owner request')).toMatchObject({ from: 'alice', room: null });
+      expect((await api(TOKENS.alice, 'POST', '/v1/names', { names: { alice: b } })).status).toBe(400);
+      expect((await api(TOKENS.alice, 'POST', '/v1/names', { names: { owner: 'invalid' } })).status).toBe(400);
+      expect((await api(null, 'POST', '/v1/names', { names: {} })).status).toBe(401);
+    } finally {
+      await api(TOKENS.alice, 'POST', '/v1/names', { names: {} });
+      writeFileSync(sharedFile, original);
+    }
+  }, 180_000);
+
+  it('uses an identity-specific keeper for a swarm on another network', async () => {
+    const other = await Keeper.start({ privateKey: generatePrivateKey(), env: ENV, home: join(tmp, 'other-keeper'), dbPath: null });
+    try {
+      await api(TOKENS.bob, 'POST', '/v1/names', { names: { keeper: other.address } });
+      expect((await api<{ address: string }>(TOKENS.bob, 'GET', '/v1/keeper')).json.address).toBe(other.address);
+      const room = `scoped-${Date.now().toString(36)}`;
+      expect((await api<{ ok: boolean }>(TOKENS.bob, 'POST', '/v1/join', { room, wait: 60 })).json.ok).toBe(true);
+      expect(other.roomNames()).toContain(room);
+      expect(keeper.roomNames()).not.toContain(room);
+    } finally {
+      await api(TOKENS.bob, 'POST', '/v1/names', { names: {} });
+      await other.stop();
+    }
+  }, 180_000);
 });

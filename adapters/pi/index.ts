@@ -10,6 +10,7 @@ import { join } from "node:path";
 import type { XmtpEnv } from "@xmtp/node-sdk";
 import { Transport, createTools, loadOrCreateKeystore, type Inbound, type Tools } from "@agent-network/core";
 import { Resolver, StaticBackend, type NameBackend, type Resolved } from "@agent-network/resolver";
+import { dbHolders } from "@agent-network/relay/guard";
 
 const room = Type.Object({ room: Type.String({ minLength: 1 }) });
 const schemas = {
@@ -227,6 +228,8 @@ export default function agentNetwork(pi: ExtensionAPI) {
     });
 
   pi.on("session_start", async () => {
+    const holders = dbHolders(join(keystore.home, `xmtp-${env}.db3`), (line) => process.stderr.write(`[agent-network] ${line}\n`));
+    if (holders.length) throw new Error(`identity is already in use by pid ${holders.join(",")}; stop its daemon/observer before starting pi`);
     pushMemory("session start; your long-term memory");
     if (heartbeatMs > 0 && !heartbeat) {
       heartbeat = setInterval(() => {

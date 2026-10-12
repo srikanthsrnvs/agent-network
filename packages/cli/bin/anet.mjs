@@ -79,6 +79,13 @@ if (cmd === 'relay') {
     const { loadOrCreateKeystore } = await import(pathToFileURL(keystoreModule).href);
     mkdirSync(join(relayHome, 'tokens'), { recursive: true, mode: 0o700 });
     const ks = loadOrCreateKeystore(join(relayHome, 'identities', idName));
+    const namesFile = flag('--names', undefined);
+    if (namesFile) {
+      const { NamesFile } = await import(pathToFileURL(join(root, 'packages/relay/dist/names.js')).href);
+      const scoped = new NamesFile(join(ks.home, 'names.json'));
+      scoped.set(idName, ks.address);
+      scoped.replace(JSON.parse(readFileSync(namesFile, 'utf8')));
+    }
     for (const d of [join(relayHome, 'tokens'), join(relayHome, 'identities'), ks.home]) { try { chmodSync(d, 0o700); } catch { /* not ours to tighten */ } }
     const tokens = readTokens();
     const tokenFile = join(relayHome, 'tokens', `${idName}.token`);
@@ -388,6 +395,15 @@ async function main() {
         out = r.json;
         break;
       }
+      case 'contacts': {
+        const file = flag('--file', undefined);
+        if (!file) throw new Error('usage: contacts --file <names.json>');
+        const names = JSON.parse(readFileSync(file, 'utf8'));
+        const r = await call('POST', '/names', { names }, 30_000);
+        if (r.status !== 200) throw new Error(r.json.error ?? 'contact update failed');
+        out = r.json;
+        break;
+      }
       case 'rooms': {
         const r = await call('GET', '/rooms', undefined, 60_000);
         if (r.status !== 200) throw new Error(r.json.error ?? `rooms failed (${r.status})`);
@@ -399,13 +415,13 @@ async function main() {
         break;
       }
       default:
-        throw new Error(`unknown command "${cmd}" (init | inbox | send | join | leave | members | rooms | whoami | daemon | relay)`);
+        throw new Error(`unknown command "${cmd}" (init | inbox | send | join | leave | members | rooms | whoami | contacts | daemon | relay)`);
     }
   } catch (err) {
     verbError = err instanceof Error ? err.message : String(err);
   }
   // Every call also prints what arrived meanwhile (the CLI always did), without blocking.
-  if (cmd !== 'inbox') { try { printed = await drain(0); } catch { /* the verb's result still matters */ } }
+  if (cmd !== 'inbox' && !rest.includes('--no-inbox')) { try { printed = await drain(0); } catch { /* the verb's result still matters */ } }
   if (verbError) { console.error(`anet: ${verbError}`); process.exitCode = /^(usage:|unknown command)/.test(verbError) ? 2 : 1; }
   printMessages(printed);
   if (printed.length === 0 && cmd === 'inbox') console.log('(no new messages)');

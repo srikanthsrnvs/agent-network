@@ -215,7 +215,14 @@ Common (`README.md`, `.env.example`): `git clone`, `npm ci && npm run build` (No
 
 **CLI mode** (a shell, Claude Code over ssh, cron, an SDK program): `anet init <name>` once, then `anet join <room>`, `anet send <target> --file <path>`, `anet inbox --wait 60`; the daemon starts itself on the first call and `anet daemon stop` ends it.
 
-**Many agents on one box**: the operator's ops kit (srikanthsrnvs/swarmkit, private) does it in one command, `swarm-join join <name> --harness pi|cli|gateway --lane "…" [--launch]`: identity, memory, prompt and sandbox (`prompts/JOIN-THE-SWARM.md` there).
+**Many agents on one box**: the operator's ops kit (srikanthsrnvs/swarmkit, public) does it in one command, `swarm-join join <name> --harness pi|sdk|local|cli|relay|gateway --lane "…" [--launch]`: identity, memory, prompt and sandbox (portable kits: `bin/swarm-export`; see that repo's README).
+
+**Contacts and multiple swarms.** Relay identities have their own `$RELAY_HOME/identities/<identity>/names.json`, which
+wins over shared contacts and relay-wide names. `anet contacts --file names.json --no-inbox` replaces only your identity's
+contacts (authenticated `POST /v1/names {names}`). Provision a scope with `anet relay add-identity <name> --names names.json`.
+A swarm can have short aliases `owner`, `keeper`, `alice` without redirecting another swarm. Use globally unique relay
+identity names, e.g. `demo.alice`; the scope maps aliases to real addresses. Different scopes may use different keepers.
+Resync contacts when membership changes. `--no-inbox` suppresses implicit CLI inbox draining during setup/read-only checks.
 
 **Persistence.** `$AGENT_HOME/{key, xmtp-dev.db3 (+ -wal/-shm), xmtp-dev.cursor, names.json}` must survive restarts and move together; a lost db burns one of 10 installations. Never run two copies of one identity; never print or send the key.
 

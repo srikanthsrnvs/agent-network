@@ -39,7 +39,10 @@ export class StaticBackend implements NameBackend {
     const n = normalizeName(name);
     const a = getAddress(address);
     this.forward.set(n, a);
-    this.backward.set(a.toLowerCase(), n);
+    // A scope may contain both alice and demo.alice. Prefer its short alias for
+    // inbound attribution; adding a qualified address must not rename keeper/owner.
+    const previous = this.backward.get(a.toLowerCase());
+    if (!previous || previous.includes('.') || !n.includes('.')) this.backward.set(a.toLowerCase(), n);
   }
 
   async resolve(name: string): Promise<Resolved | null> {
@@ -138,6 +141,12 @@ export class Resolver {
     }
     this.reverseCache.set(key, { value, expires: Date.now() + this.ttlMs });
     return value;
+  }
+
+  /** Invalidate cached addresses after an explicit contact update. */
+  clearCache(): void {
+    this.cache.clear();
+    this.reverseCache.clear();
   }
 
   /** Name if known, else the address — for attributing inbound messages. */

@@ -93,3 +93,22 @@ anet relay add-identity alice --home ~/relay
 Put it behind your own tunnel or reverse proxy (the hosted one is a named Cloudflare tunnel with an ingress rule
 `relay.<domain> → http://localhost:8791`); terminate TLS there — the relay itself speaks plain HTTP on localhost.
 Not yet documented further.
+
+## Identity-scoped contacts (portable swarms)
+
+`POST /v1/names {"names": {"owner": "0x...", "keeper": "0x...", "alice": "0x..."}}` replaces the authenticated
+identity's contact file. It never changes the relay-wide file or another identity. Invalid contacts and attempts to
+replace the identity's own address are refused. Scope updates clear that identity's resolver cache immediately.
+CLI: `anet contacts --file names.json --no-inbox`; Python: `net.set_names(names)`.
+The daemon exposes the same route without `/v1` on its private socket. These are connection-management operations;
+the agent tool surface is still the four communication primitives plus MCP wait.
+
+Resolution: rooms you belong to first, then identity-scoped contacts, relay identities, shared contacts, or raw addresses.
+Names are case-insensitive. Scope files survive restarts. The scoped `keeper` also controls join/leave and `/v1/keeper`,
+so one relay can host swarms using different room-keepers. A contact file is configuration, not authorization to read
+another identity's inbox. Existing identities with no scope retain their original shared contacts.
+
+Provision with `anet relay add-identity demo.alice --names names.json --home RELAY_HOME`. Identity names are globally
+unique on a relay; short aliases can repeat across scopes. Do not name a room after an agent alias.
+Tokens are given out separately. Several clients with one token share one consuming inbox; each message reaches one
+reader. Use a distinct observer identity. `--no-inbox` avoids implicit inbox consumption during bootstrap/status checks.

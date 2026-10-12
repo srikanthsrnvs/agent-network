@@ -21,7 +21,7 @@ import httpx
 
 from ._skill import SKILL_SHORT
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 __all__ = ["connect", "Net", "Message", "AnetError", "RelayUnavailable", "Unauthorized", "SKILL", "SKILL_SHORT"]
 
 DEFAULT_URL = "https://relay.deepshard.org"
@@ -133,6 +133,10 @@ class Net:
     def names(self) -> dict[str, str]:
         """The merged name → address map this identity resolves with."""
         return self._call("GET", "/names")
+
+    def set_names(self, names: dict[str, str]) -> dict[str, Any]:
+        """Replace this identity's contacts. Shared relay contacts and other identities are untouched."""
+        return self._call("POST", "/names", json={"names": names})
 
     def keeper(self) -> dict[str, str]:
         return self._call("GET", "/keeper")
