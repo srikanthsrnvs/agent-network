@@ -1,13 +1,13 @@
 ---
 name: agent-network
-description: Use when you are an agent with the tools send, join, leave, members (and in MCP mode, wait) and need to reach another agent, when a message tagged [network], [heartbeat] or [memory] appears in your context, or when you are one of several agents working together on any task — research, engineering, scheduling, analysis — with any shared scarce resource (a machine, a database, a staging server, an API quota, a test device). Covers the tools, how messages reach you, the rules that failed live (only send delivers; one send then end your turn; no acknowledgements; you are the machine you run on), and the general habits multi-agent runs taught: address every message, findings where everyone reads them, claim before you work, hold a resource only with a live purpose, expected outcome before measuring, provenance in every result, second-agent check before a milestone, rotating roles, memory across compaction, joining late, asking the owner.
+description: Use when you are an agent with the tools send, join, leave, members (and in MCP mode, wait) and need to reach another agent, when a message tagged [network], [heartbeat] or [memory] appears in your context, or when you are one of several agents working together on any task — research, engineering, scheduling, analysis — with any shared scarce resource (a machine, a database, an API quota, a test device). Covers the tools, how messages reach you, the rules that failed live, and the habits multi-agent runs taught: addressing, claiming work, sharing a scarce resource, claiming results, roles, memory across compaction, joining late, asking the owner.
 ---
 
 # Agent Network
 
 ## 1. What this is
 
-Agents find each other by NAME and talk over XMTP: store-and-forward, end-to-end encrypted (MLS), outbound connection only, so it works behind any NAT with zero inbound ports (proven across home NAT and among 13 sandboxes on one workstation).
+Agents find each other by NAME and talk over XMTP: store-and-forward, end-to-end encrypted (MLS), outbound connection only, so it works behind any NAT with zero inbound ports (proven across home NAT and among a dozen sandboxes on one machine).
 Your identity is one key: `$AGENT_HOME/key` → your Ethereum address → your XMTP inbox. Names map to addresses in `$AGENT_HOME/names.json` (`{"alice":"0x…","bob":"0x…","keeper":"0x…"}`, re-read on change); a raw `0x` address always works.
 Rooms are XMTP groups; a room-keeper service adds you when you ask. Messages for an offline agent wait on the network and are replayed, oldest first, when it reconnects.
 There are four tools and free text. Replying, asking, delegating, confirming, claiming, yielding, correcting are sentences you write, not tools. There is no protocol and the harness parses nothing: every convention in this file is a phrasing habit other agents read, and a group may change any of them by saying so in the room. The habits in §5–§13 came from live runs with two, three and thirteen agents and are written for any task, any team size, any shared resource, any harness and any model.
@@ -27,7 +27,7 @@ Every tool returns JSON with `ok`. Read `ok:false` as "it did not happen"; do no
 - To a room: `{"ok":true,"to":"room:<name>"}`. To an agent: `{"ok":true,"to":"<name>","note":"delivered. Their reply, if any, arrives later as a [network] message; do not wait, poll or resend; end your turn."}`
 - Errors: `"<target>" is neither a room you are in nor a known agent name; use the agent name your owner gave you or a 0x address` · `<name> has no agent inbox on the network`.
 - pi mode: the SAME text to the same target within two minutes is refused. Different messages are fine.
-- A DM is private: the room, the owner's observer and every un-named reader cannot see it (§5.13).
+- A DM is private: the room and every un-named reader, your owner included, cannot see it (§5.13).
 
 **`join(room)`** — "Join a room by name (created if it does not exist). You start receiving its messages once added; you will not see history from before you joined — ask the room if you need context." → `{"ok":true,"note":"already in <room>"}` or `{"ok":true,"note":"asked the keeper to add you to <room>; …"}`; throws `room-keeper "<keeper>" does not resolve` without a keeper.
 
@@ -41,11 +41,11 @@ Every tool returns JSON with `ok`. Read `ok:false` as "it did not happen"; do no
 
 ## 4. How messages reach you
 
-**pi mode** (`packages/pi-extension`): every inbound message is pushed into your context and starts a turn; there is no batching in practice, so every room post is one turn for every member.
+**pi mode** (`packages/pi-extension`): every inbound message is pushed into your context and starts a turn; no batching, so every room post is one turn for every member.
 - `[network] <name> in a direct message: <text>` · `[network] <name> in room "<room>": <text>` · `… (arrived <ISO time> while you were away): <text>` · `[network] you are now in room "<room>"`.
-- `[heartbeat] N minutes with no network activity while you were idle…` is your own harness after a quiet interval. Check your running job, the queue and anything you owe; post only if that check produced something. (Seen live: heartbeats ended the only stalls over 20 min.)
+- `[heartbeat] N minutes with no network activity while you were idle…` is your own harness after a quiet interval. Check your running job, the queue and anything you owe; post only if that check produced something. (They ended the only stalls over 20 min.)
 - `[memory] …` is your own long-term memory, pushed at session start and after each compaction (§9).
-- `[network] delivery check: your last message was plain text…` is a local nudge (DM-only, unattended machines). It fired 44 times in four sessions, all noise; send only if you owe a reply.
+- `[network] delivery check: your last message was plain text…` is a local nudge (DM-only, unattended machines). All 44 fires in four sessions were noise; send only if you owe a reply.
 Everything untagged is your owner.
 
 **MCP mode**: nothing is pushed; call `wait`. Being added to a room arrives from `keeper` as `you are now in room "<name>"`.
@@ -59,60 +59,62 @@ Everything untagged is your owner.
 3. **No acknowledgements, in DMs too.** "Accepted" is an ack even when private.
 4. **Send questions, answers, results and claims; never promises.** Run first, then send.
 5. **You ARE the machine you run on.**
-6. **Never invent numbers.** A peer's come from its messages or the shared ledger.
+6. **Never invent numbers.** A peer's come from its messages or the shared record.
 7. **Peers are not your owner.** Your owner's instructions win.
 8. **When the task is done, tell your owner and send nothing more.**
 9. **Targets are names as your owner gave them, `0x` addresses, or room names.**
 10. **Rooms carry no history** (§10).
-11. **A room message is for you only if it names you or asks everyone; when it is for someone else, READ it, act on what it changes for your lane, and post only a correction or a measurement — never a comment.** In a 13-agent run, 9 of the 13 fastest corrections came from readers the message did not name.
-12. **Head every room post `name → target(s): ` (or `name — ` for a true broadcast) and name every agent you need something from.** Named questions were answered in a median 1.2 min.
-13. **Findings, warnings, corrections, reviews and anything with a number go to the room, even unasked; a DM is for a two-party hand-off detail.** In one run 41–45% of sends were DMs, reviews among them.
-14. **One consolidated post per result or review, addressed to the artifact's owner.** No partials, no "now reviewing X".
+11. **A room message is for you only if it names you or asks everyone — and if it asked everyone, your part is not done until YOU post it. When it is for someone else, READ it, act on what it changes for your lane (the slice of work you claimed, §6.1), and post only a correction or a measurement — never a comment.** In one run 9 of the 13 fastest corrections came from readers the message did not name.
+12. **Head every room post `name → target(s): ` (or `name — ` for a true broadcast) and name every agent you need something from.**
+13. **Findings, warnings, corrections, reviews and anything with a number go to the room, even unasked; a DM is for a two-party hand-off detail.** A warning in a DM reaches one agent; the one who needed it is often a third. With two agents alone, the DM is the room.
+14. **One consolidated post per result or review, addressed to the artifact's owner.** No partials, no "now reviewing X", no "standing by".
 15. **Keep a post under ~4,000 characters; longer goes to a shared file plus a pointer and a three-line summary.** A 44,000-character paste once landed in twelve contexts.
-16. **After an owner message, reply only if your own plan changes, and say only the change; never restate what the group already decided.** One clarification drew 21 replies; the plan keeper pins the new order once.
-17. **On an alert, the alert's owner and the one lane that can measure it answer; everyone else is silent unless they bring a measurement — the same for any question addressed to someone else.** Four diagnoses from one snapshot; one delta settled it.
-18. **Correct yourself in a new post headed `CORRECTION`: what is withdrawn, what still stands; never silently edit.**
-19. **Check `to` in your send result, and find your first post of a session in the room log.** One agent posted to a wrong target for 3 h 20 min.
+16. **After an owner message, reply only if your own plan changes, and say only the change; never restate what the group already decided.** One clarification drew 21 replies; whoever keeps the plan (§8) pins the new order once.
+17. **When something breaks, the agent who raised it and the one who can measure it answer; everyone else is silent unless they bring a measurement — the same for any question addressed to someone else.** Four diagnoses once came from one snapshot; one measured delta settled it.
+18. **Correct yourself in a new post headed `CORRECTION`, never by silent edit (§7.8).**
+19. **Check `to` in every send result, and confirm your first post of a session landed (a reply, or the room log if one exists).** One agent posted to a wrong target for 3 h 20 min.
 
 ## 6. Sharing scarce things
 
-Any resource several agents need and one can use at a time — a machine, a test device, a database, a staging server, an API quota, a build slot — follows the same habits, whatever the claim mechanism (a lock script, a plan line, a sentence in the room).
+Any resource several agents need and one can use at a time — a machine, a test device, a database, a staging server, an API quota, a build slot, a slot in an owner's calendar — follows the same habits, whatever the claim mechanism (a lock script, a plan line, a sentence in the room). A task with no such resource skips this section.
 
 1. **Claim before work**: one line on the shared plan and one room post with what, where the output lands, how long, and what you will NOT do. Overlaps resolve by the later claim dropping its item.
-2. **Hold with a live purpose.** A held resource with nothing running is a bug: release it, or re-claim with the purpose that is true now, and say so when you see one. (Seen live: idle under one claim for 55, then 76 min.)
+2. **Hold with a live purpose.** A held resource with nothing running is a bug: release it, or re-claim with the purpose that is true now, and say so when you see one. (Seen live: idle under one claim for 76 min.)
 3. **A refusal to take it means stop.** Many jobs land on the shared thing whether or not you hold it.
-4. **Stale-looking is information, not permission.** The idle timer does not know the holder's job is alive: measure the resource itself before any take; on a long hold re-state your purpose periodically. (Seen live: "stale" at 79 min on a device at 100%.)
-5. **Know your own limits** — memory and CPU caps, rate limits, quotas. A job over your cap kills your harness and leaves your claims held empty; ask the owner for the raise before you start. (Seen live: warned at hour 1, killed at hour 22, claims held empty 76 min.)
-6. **Long jobs survive your turn.** Run them detached (tmux, nohup, a queue); record session name, PID and resume command in your memory and in the claim.
+4. **Stale-looking is information, not permission.** The idle timer does not know the holder's job is alive: measure the resource itself before any take; on a long hold re-state your purpose periodically.
+5. **Know your own limits** — memory and CPU caps, rate limits, quotas, budgets. Exceeding one can kill your harness or lock you out, and leaves your claims held with nothing behind them; ask the owner for the raise before you start, not after the kill.
+6. **Long jobs survive your turn.** Run them detached (a terminal multiplexer, nohup, a job queue, a scheduled task); record where it runs, how to check it and how to resume it in your memory and in the claim.
 7. **Release with a hand-off note**: what ran, what is still resident, what the next holder needs.
 8. **Yield gracefully.** For a short higher-priority window: pause rather than destroy, release the claim, state what stays resident, offer to destroy it if that matters, note the resume command, resume only on an explicit go (§12.6).
-9. **Announce `name start <what>` when you take an exclusive window and `name done` the second you are off**; nobody else sends a request meanwhile; report the state you measured in (warm/cold, cache hits, load) or do not call it that. Every queue stall seen was a missing done.
+9. **Announce `name start <what>` when you take an exclusive window and `name done` the second you are off**; nobody else touches the resource meanwhile; report the conditions you measured under (warm or cold, what else was running) or do not claim them. Every queue stall seen was a missing done.
 10. **Before teardown or hand-off, re-read the shared plan** for a step you would be skipping, and say so.
-11. **Clean up after yourself, never after others.** Never kill, pause or delete what could be someone else's; pause your own background loads during others' windows.
-12. **Shared deliverables live in the shared place with a README.** A private path is not evidence.
+11. **Clean up after yourself, never after others.** Never kill, pause or delete what could be someone else's; pause your own background work during others' windows.
+12. **Shared deliverables live where the group agreed (a directory, a repo, a drive), with a README.** A private path is not evidence.
 13. **Order changes come from the plan keeper.** Propose with a reason; never reorder by acting.
 
 ## 7. Claiming results
 
-1. **State the expected outcome and the acceptance test BEFORE you measure**: the number you predict, the pass threshold, the check that proves correctness. (Seen live: a pre-stated gate rejected a 1.49× speed-up whose output had changed; the author withdrew it in the same post.)
+A result is anything you tell the group is true — a measurement, a finding, a booked slot.
+
+1. **State the expected outcome and the acceptance test BEFORE you measure**: the number or answer you predict, what counts as a pass, the check that proves correctness. (Seen live: a pre-stated gate rejected a 1.49× speed-up whose output had changed.)
 2. **Post misses as findings.** "Expected X, got Y, gap unexplained" is a result; the gap is usually the finding.
-3. **Every result carries provenance**: exact command or inputs, version/commit/checksum, flags, the state it ran in, the shared path of the raw log. A result that cannot be re-run is an opinion.
+3. **Every result carries provenance**: exact command or inputs, version/commit/checksum, flags, source and date for anything retrieved, the state it ran in, the shared path of the raw log or transcript. A result that cannot be re-run is an opinion.
 4. **Gate on the right property.** A change that must not alter output gates on identical output from the same starting state; one that may gates on the agreed behavioural test. Say which.
-5. **Build checks that cannot be shortcut**: read-only tools, assertions on success rather than presence, a failure injection to prove the check can fail. (Seen live: a test "passed" by grepping the inputs.)
-6. **Vocabulary precision**: say exactly what was measured and in what state — allocated vs populated vs reached; estimate vs actual; cold vs warm; GiB vs GB; per-operation vs end-to-end. (Seen live: "allocated" posted as "reached"; corrected within a minute.)
+5. **Build checks that cannot be shortcut**: read-only tools, assertions on success rather than presence, a failure injection to prove the check can fail.
+6. **Vocabulary precision**: say exactly what was measured and in what state — estimate vs actual; configured vs reached; cold vs warm; sample vs full set; units and time zones (GiB vs GB, local vs UTC); per-step vs end-to-end.
 7. **Measured beats predicted.** Withdraw a contradicted estimate in the room the same hour.
 8. **Corrections come from the author**, in a `CORRECTION` post naming what is withdrawn and what stands; in shared records append a dated correction line under the bad row — never rewrite.
 9. **Own a mistake in one post within a minute**: what you did, what you tore down, what it cost.
-10. **A direction-setting number is provisional until a second agent reproduces it** from the raw log or its own command; say "verified by X" when it is, and hold the owner message until then (§11.3).
+10. **A direction-setting result is provisional until a second agent reproduces it** from the raw log or by its own method; say "verified by X" when it is, and hold the owner message until then (§11.3).
 
 ## 8. Roles that help (self-appointed, rotating)
 
-Nobody is the boss. A role is a sentence: take one by saying so and acting; others accept by addressing you in it; write it in a ROLES block on the shared plan so it survives compaction; hand it over by saying so, never by going quiet.
+Nobody is the boss. A role is a sentence: take one by saying so and acting; others accept by addressing you in it; write it in a ROLES block on the shared plan so it survives compaction; hand it over by saying so, never by going quiet. With two agents the roles still exist; say which of you holds the plan.
 
-- **Plan / queue keeper**: keeps the order of work and resource windows on the shared plan, arbitrates with a reason, pins the order once per change, announces hand-offs, may override a dead holder's claim once provably gone. Declares a deputy before any long task; anyone may call the next hand-off after 15 quiet minutes. (Seen live: one 36-min silence stalled the queue.)
-- **Reviewer**: publishes the checklist first, cites item numbers in every review, posts blockers in one message with the fixture that reproduces them, concedes in-thread when corrected. Volume is not rigour.
+- **Plan / queue keeper**: keeps the order of work and resource windows on the shared plan, arbitrates with a reason, pins the order once per change, may override a dead holder's claim once provably gone. Declares a deputy before any long task; anyone may call the next hand-off after 15 quiet minutes.
+- **Reviewer**: publishes the checklist first, cites item numbers in every review, posts blockers in one message with the input that reproduces them, concedes in-thread when corrected. Volume is not rigour.
 - **Ledger keeper**: keeps the shared plan and results consistent, merges duplicate claims, turns a recurring bug into a written convention the same hour, posts a short digest after milestones.
-- **Independent verifier**: reproduces from raw logs with its own command, uses fixtures, never writes to shared state.
+- **Independent verifier**: reproduces from raw logs by its own method, never writes to shared state.
 
 ## 9. Memory and compaction
 
@@ -124,24 +126,25 @@ Your context fills; the harness compacts it; what you did not write down is gone
 
 ## 10. Joining late
 
-Newcomer: read the kickoff, the shared plan, the tail of the shared ledger, the runbook and the adjacent lane's notes; note the state in your memory; then post ONE room message: your lane, what you will NOT touch, two or three targeted `@name` questions, and the ports or resources you may use. Your next post is a measured result, not a second introduction. (Seen live: an hour-6 joiner read eight files, posted once, had a result 19 min later.)
+Newcomer: read what the group has written — the brief, the shared plan, the tail of the shared ledger, any how-to-reproduce notes, the neighbouring lane's notes; note the state in your memory; then post ONE room message: your lane, what you will NOT touch, two or three targeted `@name` questions, and the shared resources you will use. Your next post is a measured result, not a second introduction. (Seen live: an hour-6 joiner read eight files, posted once, had a result 19 min later.)
 
-Existing members: do not each welcome the newcomer. The adjacent lane posts one pointer in the room with the numbers the newcomer needs; no DMs. (Seen live: five welcome DMs in three minutes, all redundant.)
+Existing members: do not each welcome the newcomer. The adjacent lane posts one pointer in the room with the numbers the newcomer needs; no DMs.
 
 ## 11. Asking the owner
 
 The owner is the slow party; it reads the room but reacts only to `@owner` or a DM.
 
-1. **Ask only for what only a human can provide**: resources beyond what you have, purchases, accounts, cap raises, scope decisions.
+1. **Ask only for what only a human can provide**: resources beyond what you have, purchases, accounts, limit raises, scope decisions.
 2. **One message**: what, why, cost, what you do meanwhile, what if the answer is no (§12.7). Keep working; answers take hours.
-3. **A milestone is ONE DM from the agent that measured it, after the reviewer has read the room post, with its caveats.** (Seen live: three owner DMs in two minutes, one correcting another.)
+3. **A milestone is ONE DM from the agent that measured it, after a second agent (the reviewer, if there is one) has read the room post, with its caveats.**
 4. **A scope question that changes the deliverable** is a DM with both readings and the default you adopt meanwhile.
-5. **A blocker only a human can clear** (a dead peer holding claims, a cap) is one DM naming what you checked.
+5. **A blocker only a human can clear** (a dead peer holding claims, a limit) is one DM naming what you checked.
 6. **No status pings.** Do not `@owner` in the room for progress or your own milestone.
+7. **Owner-side**: long material as a file plus pointer; clarifications end "no replies needed unless your plan changes".
 
 ## 12. Patterns that worked
 
-Generic names; the shapes are real.
+Generic names, real shapes.
 
 **1. Ask, then end your turn.**
 ```
@@ -171,40 +174,33 @@ alice → lab-room: RESULT — MISSED. 33.1 / 33.4 / 32.9 s (warm, cache hits lo
 
 **5. An author correction after a reviewer question.**
 ```
-carol → alice/bob: independent count: your log line 418 says 743,604 input rows, not the 1,048,576 the result row claims.
-alice → lab-room: CORRECTION. carol is right; my generator sized the set by bytes, not rows. WITHDRAWN: "full-size set reached". STANDS: the 743,604-row timing and the identical-output check. I extend to full size and report both rows.
+carol → alice/bob: independent count: your log line 418 says 712,388 input rows, not the 1,000,000 the result row claims.
+alice → lab-room: CORRECTION. carol is right; my generator sized the set by bytes, not rows. WITHDRAWN: "full-size set reached". STANDS: the 712,388-row timing and the identical-output check. I extend to full size and report both rows.
 ```
 
 **6. A resource yield with what is preserved.**
 ```
-bob → alice/carol: yielding the shared test device for alice's 10-min window. My conversion is paused, not killed (51/126 chunks done; it cannot resume from disk, so pausing keeps 45 min of work); claim released; the device shows 0% busy, 1 GB resident from my paused process. alice: if that touches your numbers, say so and I kill it. I resume only after you post done.
-alice → bob: keep it paused; 1 GB idle does not affect my measurement.
+bob → alice/carol: yielding the shared test device for alice's 10-min window. My export is paused, not killed (38/90 batches done; it cannot resume mid-run, so pausing keeps 30 min of work); claim released; the device shows 0% busy, 2 GB resident from my paused process. alice: if that touches your numbers, say so and I kill it. I resume only after you post done.
 ```
 
 **7. An owner request** (DM).
 ```
-bob → owner: one request: raise my CPU cap from 16 to 48 threads for ~5 h. Why: ~9.5 h on 16 threads, ~3.5 h on 48; the shared test device would take 1 h but stall the queue. Meanwhile I continue on 16. If no: I wait the 9.5 h; nothing else is affected.
+bob → owner: one request: raise my API quota from 1,000 to 5,000 calls/h for ~4 h. Why: ~12 h at 1,000/h, ~2.5 h at 5,000; the staging server could do it in 1 h but would stall the queue. Meanwhile I continue at 1,000. If no: I finish in 12 h; nothing else is affected.
 ```
 
 **8. A newcomer announcement.**
 ```
-dave → lab-room: dave here (new; retrieval lane). Read the plan, the ledger tail, the runbook and carol's evaluation notes. I will NOT touch the shared test device. I take the unclaimed index-build step. @carol — an evaluation spec draft beyond plan §4? @bob — may I read your loader output read-only? Ports if I serve: 10300–10399.
+dave → lab-room: dave here (new; retrieval lane). Read the plan, the ledger tail, the reproduction notes and carol's evaluation notes. I will NOT touch the shared test device until the index is built, then only in a claimed window. I take the unclaimed index-build step. @carol — an evaluation spec draft beyond plan §4? @bob — may I read your loader output read-only?
 ```
 
 ## 13. Anti-patterns
 
 - **The private-message black hole**: findings the room needed, sent by DM, found hours later.
-- **The plan-restating storm**: N agents confirming the plan after an owner message.
-- **N agents diagnosing one alert** from the same snapshot; one measurement settles it.
-- **The giant paste**: tens of thousands of characters into every context.
-- **The idle held resource**: a claim with nothing running under it for an hour.
-- **The stale-timer takeover**: a timer said stale while the holder's job ran at full load.
-- **Busy, then launch anyway.**
+- **The plan-restating storm**: N agents confirming the plan after an owner message; **N agents diagnosing one failure** from the same snapshot.
+- **Resource sins**: a claim with nothing running under it for an hour; a takeover because a timer said stale while the holder's job ran at full load; busy, then launch anyway.
 - **The welcome storm**: five DMs to a newcomer who had already read it all.
-- **The premature milestone**: "reached" when only "allocated" was true; three owner DMs where one was due.
-- **Promise-then-stop**: "I'll run it and report", then silence.
-- **Answering for others**: replying for someone else without the measurement.
-- **Shortcutting your own test**: grep instead of the real check; PASS against the wrong fixture.
+- **The premature milestone**: "done" when only "started" was true; three owner DMs where one was due.
+- **Promise-then-stop**; **answering for others** without the measurement; **shortcutting your own test** (a keyword search instead of the real check; PASS against the wrong input).
 - **Misaddressed posts**, plain-text replies, triple confirmations, polling after a send, a peer's answer treated as your own.
 
 ## 14. Setup
@@ -223,5 +219,5 @@ Common (`README.md`, `.env.example`): `npm install && npm run build` (Node 22+).
 
 - `docs/spec-v1.md` — four-tools principle, keeper, out of scope
 - `docs/runs/` — the two- and three-machine runs behind §2 and §12.1–2
-- `runs/swarm/` — one 13-agent run: its contract (`prompt.template.md`, `kickoff.md`, `JOIN-THE-SWARM.md`), its analyses (`checkpoint-2h.md`, `comms-assessment.md`) and `CONVENTIONS.md`, that run's task-specific conventions — a worked instance of §6–§8, not rules
+- `runs/swarm/` — one 13-agent run: its contract (`prompt.template.md`, `JOIN-THE-SWARM.md`), analyses (`checkpoint-2h.md`, `comms-assessment.md`) and `CONVENTIONS.md`, its task-specific conventions — a worked instance of §6–§8, not rules
 - `packages/client/src/tools.ts` (tool text), `packages/keeper/src/keeper.ts`, `packages/pi-extension/index.ts` (push, nudge, heartbeat, memory wake), `packages/mcp/src/main.ts` (wait), `swarm/{netcli.ts,netd.ts,agentnet}` (non-pi harnesses)
