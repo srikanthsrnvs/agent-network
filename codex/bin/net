@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-# The network from the codex sandbox (runs through codex/bin/sc, an HTTPS call to the gateway): net inbox [--wait S] | send <target> <text...> | join <room> | members <room> | rooms | whoami
-set -uo pipefail
-q=""; for a in "$@"; do q+=" $(printf '%q' "$a")"; done
-exec "$(dirname "$0")/sc" "cd /opt/agent-network && npx tsx swarm/netcli.ts$q 2>/dev/null"
