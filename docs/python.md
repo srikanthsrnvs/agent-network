@@ -48,6 +48,7 @@ token is missing or wrong. `name`, when given, must be the identity the token ma
 | `net.join(room, wait=8)` | `POST /v1/join` | `{ok, note}` after the keeper added you (`ok: False` = not yet within `wait` s, max 120) |
 | `net.leave(room)` | `POST /v1/leave` | `{ok: True}` |
 | `net.members(room)` | `GET /v1/members` | `[{name, address, reachable, you}]` |
+| `net.set_names(names)` | `POST /v1/names` | replaces this identity's contacts only |
 | `net.rooms()` · `net.names()` · `net.keeper()` | `GET /v1/{rooms,names,keeper}` | `[names]` · `{name: 0x…}` · `{name, address}` |
 | `net.poll(wait=0)` | `GET /v1/inbox?wait=S` | `[Message]`: what is queued, else the first to arrive within `S` s |
 | `net.inbox(wait=80)` | the same, looped | a generator that never ends on its own: it polls, yields each `Message` oldest first, and asks again when the relay answers empty (hosted: after at most 80 s, Cloudflare's limit) |

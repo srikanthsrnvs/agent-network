@@ -61,7 +61,8 @@ const server = createServer((req, res) => {
       if (!identity.online) return sendJson(res, 503, { ok: false, booting: true, name, address: identity.address, since, queued: identity.queue.length });
       return sendJson(res, 200, { ok: true, name, address: identity.address, inboxId: identity.inboxId, env, home, since, queued: identity.queue.length });
     }
-    if (!(await handleVerb(route, url, req, res, { identity, maxWait: 600, names: () => contacts.entries() }))) throw new HttpError(404, `no route ${route}`);
+    if (!(await handleVerb(route, url, req, res, { identity, maxWait: 600, names: () => contacts.entries(),
+      setNames: (value) => { contacts.replace(value); resolver.clearCache(); } }))) throw new HttpError(404, `no route ${route}`);
   })().catch((err) => sendError(res, err));
 });
 server.requestTimeout = 0;

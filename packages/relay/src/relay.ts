@@ -83,12 +83,14 @@ export async function startRelay(opts: RelayOptions): Promise<Relay> {
   const contacts = new NamesFile(namesPath);
   const own = new StaticBackend({});
   if (isAddress(keeperName)) contacts.set('keeper', keeperName);
-  const resolver = new Resolver({ backends: [own, contacts], ttlMs: 10_000 });
-  const names = () => ({ ...contacts.entries(), ...own.entries() });
-  const keeperInfo = async () => {
-    const k = await resolver.resolve(keeperName);
+  const scopes = new Map<string, { contacts: NamesFile; resolver: Resolver }>();
+  const names = (id: Identity) => ({ ...contacts.entries(), ...own.entries(), ...scopes.get(id.name)!.contacts.entries() });
+  const effectiveKeeper = isAddress(keeperName) ? 'keeper' : keeperName;
+  const keeperInfo = async (id: Identity) => {
+    const r = scopes.get(id.name)!.resolver;
+    const k = await r.resolve(effectiveKeeper);
     if (!k) throw new HttpError(400, `keeper "${keeperName}" does not resolve; add it to ${namesPath} or set KEEPER_ADDRESS`);
-    return { name: isAddress(keeperName) ? ((await resolver.reverse(k.address)) ?? 'keeper') : keeperName, address: k.address };
+    return { name: effectiveKeeper, address: k.address };
   };
 
   // --- identities: one per name in tokens.json, booted at start and lazily on first use -----------------
@@ -98,7 +100,12 @@ export async function startRelay(opts: RelayOptions): Promise<Relay> {
     let id = identities.get(name);
     if (id) return id;
     if (!NAME_RE.test(name)) throw new HttpError(500, `identity name "${name}" in tokens.json is not a valid name`);
-    id = new Identity({ name, home: join(home, 'identities', name), env, resolver, keeperName, namesPath, log });
+    const identityHome = join(home, 'identities', name);
+    const scoped = new NamesFile(join(identityHome, 'names.json'));
+    const resolver = new Resolver({ backends: [scoped, own, contacts], ttlMs: 10_000 });
+    id = new Identity({ name, home: identityHome, env, resolver, keeperName: effectiveKeeper, namesPath, log });
+    scoped.set(name, id.address);
+    scopes.set(name, { contacts: scoped, resolver });
     const holders = dbHolders(id.dbPath, log);
     if (holders.length) throw new HttpError(503, `identity ${name}: its db is open by pid ${holders.join(',')}; refusing to open it twice`);
     identities.set(name, id);
@@ -129,7 +136,7 @@ export async function startRelay(opts: RelayOptions): Promise<Relay> {
         return taken.messages;
       } finally { id.polling--; }
     },
-    self: async () => { await id.ready(); const w = id.whoami(); return { name: w.name, address: w.address, inboxId: w.inboxId, env: w.env, names: names() }; },
+    self: async () => { await id.ready(); const w = id.whoami(); return { name: w.name, address: w.address, inboxId: w.inboxId, env: w.env, names: names(id) }; },
   });
   async function newSession(id: Identity): Promise<Session> {
     const old = sessions.get(id.name);
@@ -183,13 +190,15 @@ export async function startRelay(opts: RelayOptions): Promise<Relay> {
     }
     if (name === ADMIN) throw new HttpError(403, 'the admin token is not an identity');
     const id = identity(name);
-    if (route === 'GET /keeper') return sendJson(res, 200, await keeperInfo());
+    if (route === 'GET /keeper') return sendJson(res, 200, await keeperInfo(id));
     if (url.pathname === '/v1/mcp') return mcp(req, res, id);
     if (route === 'GET /inbox') {
       if (id.polling >= MAX_POLLS_PER_IDENTITY) throw new HttpError(429, `too many concurrent inbox polls for ${name} (max ${MAX_POLLS_PER_IDENTITY})`);
       clampWait(url.searchParams.get('wait'), maxWait);
     }
-    if (!(await handleVerb(route, url, req, res, { identity: id, maxWait, names }))) throw new HttpError(404, `no route ${req.method} ${url.pathname}`);
+    if (!(await handleVerb(route, url, req, res, { identity: id, maxWait, names: () => names(id),
+      setNames: (value) => { const scope = scopes.get(id.name)!; scope.contacts.replace(value); scope.resolver.clearCache(); },
+    }))) throw new HttpError(404, `no route ${req.method} ${url.pathname}`);
   }
 
   const listener = (req: IncomingMessage, res: ServerResponse) => {

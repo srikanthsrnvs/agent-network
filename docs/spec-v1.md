@@ -1,6 +1,8 @@
 # Agent Network — Spec v1
 
-**Status:** v1 final · **Last edited:** 2026-09-29
+**Status:** historical product design; implementation details in README.md · **Original date:** 2026-09-29
+
+This describes the intended device product, including future ENS/ERC-8004 onboarding. Shipped agents use static contacts and XMTP dev. CLI/MCP/SDK harnesses collect a durable inbox; pi receives steers. `reachable` means an inbox exists, not online status. The HTTP relay is an adapter over XMTP, not a replacement transport.
 
 ---
 

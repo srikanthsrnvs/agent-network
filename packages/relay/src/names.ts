@@ -3,7 +3,8 @@
  * (the pi extension does the same). The daemon reads $AGENT_HOME/names.json; the relay reads the shared
  * RELAY_HOME/names.json. `extra` entries (self, the relay's own identities, the keeper) win over the file.
  */
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, renameSync, writeFileSync } from 'node:fs';
+import { isAddress } from 'viem';
 import { StaticBackend, type NameBackend, type Resolved } from '@agent-network/resolver';
 
 export class NamesFile implements NameBackend {
@@ -14,7 +15,7 @@ export class NamesFile implements NameBackend {
 
   /** A name that is always known, whatever the file says (re-applied on every reload). */
   set(name: string, address: `0x${string}`): void {
-    this.extra.set(name, address);
+    this.extra.set(name.toLowerCase(), address);
     this.mtime = -1;
   }
 
@@ -46,4 +47,26 @@ export class NamesFile implements NameBackend {
   reverse(address: `0x${string}`): Promise<string | null> { return this.load().reverse(address); }
   /** The merged map (file + extras), for /names and agent://self. */
   entries(): Record<string, string> { return this.load().entries(); }
+
+  /** Replace only this identity's contacts; never the relay's shared address book. */
+  replace(value: unknown): void {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('names must be a name-to-address object');
+    const entries = Object.entries(value);
+    const normalized: Record<string, string> = Object.create(null);
+    if (entries.length > 1000) throw new Error('at most 1000 contacts');
+    for (const [name, address] of entries) {
+      if (!/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(name) || typeof address !== 'string' || !isAddress(address)) {
+        throw new Error('each contact needs a valid name and Ethereum address');
+      }
+      const key = name.toLowerCase();
+      if (normalized[key] && normalized[key].toLowerCase() !== address.toLowerCase()) throw new Error('conflicting case-insensitive contact names');
+      normalized[key] = address;
+      const own = this.extra.get(key);
+      if (own && own.toLowerCase() !== address.toLowerCase()) throw new Error('cannot replace this identity\'s own address');
+    }
+    const tmp = `${this.path}.${process.pid}.tmp`;
+    writeFileSync(tmp, JSON.stringify(normalized, null, 2) + '\n', { mode: 0o600 });
+    renameSync(tmp, this.path);
+    this.mtime = -1;
+  }
 }

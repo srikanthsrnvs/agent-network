@@ -1,3 +1,7 @@
+# Historical implementation plan
+
+The reorganization, hosted relay and Python/SDK integrations described below shipped in v0.3.0. This is design history, not setup instructions. Use README.md, docs/relay.md and docs/python.md for current behavior.
+
 # Plan: slim agent-network to the protocol, reuse the OpenAI Agents SDK for everything else
 
 Status: PROPOSAL (2026-10-12). Nothing moved yet. Sources: a 142-file inventory of this repo with every

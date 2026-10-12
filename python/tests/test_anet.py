@@ -18,11 +18,9 @@ ROOM = f"py-test-{int(time.time()):x}"
 def receive(net: anet.Net, match, seconds: float = 90) -> Message:
     """Read the inbox until a message matches (the keeper's confirmations and other traffic are drained too)."""
     deadline = time.monotonic() + seconds
-    for m in net.inbox(wait=20):
-        if match(m):
-            return m
-        if time.monotonic() > deadline:
-            break
+    while time.monotonic() < deadline:
+        for m in net.poll(wait=max(1, min(20, int(deadline - time.monotonic())))):
+            if match(m): return m
     raise TimeoutError("no matching message")
 
 

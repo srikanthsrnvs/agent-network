@@ -140,6 +140,12 @@ export class Resolver {
     return value;
   }
 
+  /** Invalidate cached addresses after an explicit contact update. */
+  clearCache(): void {
+    this.cache.clear();
+    this.reverseCache.clear();
+  }
+
   /** Name if known, else the address — for attributing inbound messages. */
   async label(address: Address): Promise<string> {
     return (await this.reverse(address)) ?? address;
