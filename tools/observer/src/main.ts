@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Observer: the operator's window onto the swarm. It is an ordinary participant with its own
+ * Observer: the operator's window onto a room. It is an ordinary participant with its own
  * identity (key under AGENT_HOME), joins ROOM through the keeper like any agent, follows the
  * keeper's room list, and shows the traffic in a browser as it arrives: agents in a sidebar,
  * a filterable/searchable timeline with markdown rendering, an "asks for the owner" panel
@@ -144,7 +144,7 @@ async function roomNames(): Promise<string[]> {
 
 async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (!basicOk(req.headers.authorization)) {
-    res.writeHead(401, { 'www-authenticate': 'Basic realm="swarm"', 'content-type': 'text/plain' });
+    res.writeHead(401, { 'www-authenticate': 'Basic realm="agent-network"', 'content-type': 'text/plain' });
     return void res.end('login required');
   }
   const url = new URL(req.url ?? '/', `http://${host}`);
@@ -169,7 +169,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   } else if (req.method === 'GET' && url.pathname === '/api/agents') {
     json(res, 200, agents());
   } else if (req.method === 'POST' && url.pathname === '/send') {
-    // Every sandbox on the box can reach this port; only the owner may speak as the owner.
+    // Anyone who can reach this port may read; only the owner (OBSERVER_TOKEN) may speak as the owner.
     if (OWNER_TOKEN && req.headers['x-owner-token'] !== OWNER_TOKEN) return json(res, 401, { error: 'owner token required (x-owner-token header)' });
     const body = JSON.parse((await readBody(req)) || '{}') as { text?: unknown; room?: unknown; to?: unknown };
     const text = String(body.text ?? '').trim();
@@ -241,7 +241,7 @@ process.on('SIGTERM', () => void shutdown());
 // (the markdown pass spells it '\x60') or "${".
 const PAGE = String.raw`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>swarm</title>
+<title>agent network</title>
 <style>
   :root{color-scheme:dark;--bg:#0e1014;--panel:#151821;--panel2:#1b1f2a;--line:#272c38;--fg:#e8eaf0;--dim:#8d94a6;--accent:#6ea8fe;--ok:#8be28b;--warn:#f5c76b;--danger:#ff7b7b;--code:#0a0c10}
   *{box-sizing:border-box}
@@ -351,7 +351,7 @@ const PAGE = String.raw`<!doctype html>
   <select id="roomSel" title="room to post into"></select>
   <input id="text" placeholder="say something in the room… (Enter sends)" disabled autocomplete="off">
   <button id="send" disabled>Send</button>
-  <button id="tokenBtn" title="owner token (needed to post; see ~/swarm/observer.token on the box)">🔑</button>
+  <button id="tokenBtn" title="owner token (needed to post: the OBSERVER_TOKEN the observer was started with)">🔑</button>
 </footer>
 <script>
 (function () {
@@ -366,7 +366,7 @@ const PAGE = String.raw`<!doctype html>
     set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode etc. */ } }
   };
 
-  document.title = 'swarm · #' + cfg.room;
+  document.title = 'agent network · #' + cfg.room;
   $('room').textContent = '#' + cfg.room;
   $('me').textContent = cfg.name + ' · ' + cfg.address.slice(0, 6) + '…' + cfg.address.slice(-4) + ' · xmtp:' + cfg.env;
   $('me').title = cfg.address;
@@ -374,7 +374,7 @@ const PAGE = String.raw`<!doctype html>
   // ---- state ----------------------------------------------------------------------------
   var lines = [], seen = {}, stats = {}, roster = [], members = {}, rooms = [cfg.room];
   var filterFrom = null, search = '', kinds = { room: true, dm: true, system: true };
-  var expanded = {}, answered = store.get('swarm.answered.' + cfg.name, {});
+  var expanded = {}, answered = store.get('observer.answered.' + cfg.name, {});
   var unseen = 0, firstRender = true, renderQueued = false, disconnected = false;
   var timeline = $('timeline'), jump = $('jump'), input = $('text'), send = $('send'), roomSel = $('roomSel');
 
@@ -565,7 +565,7 @@ const PAGE = String.raw`<!doctype html>
       reply.onclick = function () { input.value = '@' + l.from + ' '; input.focus(); };
       top.appendChild(reply);
       var lab = el('label'); var cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = done;
-      cb.onchange = function () { if (cb.checked) answered[key] = Date.now(); else delete answered[key]; store.set('swarm.answered.' + cfg.name, answered); renderAsks(); };
+      cb.onchange = function () { if (cb.checked) answered[key] = Date.now(); else delete answered[key]; store.set('observer.answered.' + cfg.name, answered); renderAsks(); };
       lab.appendChild(cb); lab.appendChild(document.createTextNode('answered')); top.appendChild(lab);
       card.appendChild(top);
       var tb = textBlock(l, 'ask:' + key); card.appendChild(tb);
@@ -617,10 +617,10 @@ const PAGE = String.raw`<!doctype html>
     btn.onclick = function () { var k = btn.dataset.kind; kinds[k] = !kinds[k]; btn.setAttribute('aria-pressed', String(kinds[k])); firstRender = true; queueRender(); };
   });
   $('filterChip').querySelector('b').onclick = function () { setFilter(null); };
-  var ownerOpen = store.get('swarm.ownerPanel', true);
+  var ownerOpen = store.get('observer.ownerPanel', true);
   var applyOwner = function () { document.body.classList.toggle('no-owner', !ownerOpen); };
   applyOwner();
-  $('ownerBtn').onclick = function () { ownerOpen = !ownerOpen; store.set('swarm.ownerPanel', ownerOpen); applyOwner(); };
+  $('ownerBtn').onclick = function () { ownerOpen = !ownerOpen; store.set('observer.ownerPanel', ownerOpen); applyOwner(); };
   setInterval(function () { renderAgents(); renderAsks(); }, 30000);
 
   // ---- rooms, members, posting -----------------------------------------------------------
@@ -654,15 +654,15 @@ const PAGE = String.raw`<!doctype html>
   refreshRooms().then(refreshMembers); refreshAgents();
   setInterval(refreshRooms, 20000); setInterval(refreshMembers, 20000); setInterval(refreshAgents, 15000);
   function askToken() {
-    var t = window.prompt('Owner token (cat ~/swarm/observer.token on the Threadripper). Stored only in this browser.', store.get('swarm.token', ''));
-    if (t !== null) store.set('swarm.token', t.trim());
+    var t = window.prompt('Owner token (the OBSERVER_TOKEN the observer was started with). Stored only in this browser.', store.get('observer.token', ''));
+    if (t !== null) store.set('observer.token', t.trim());
   }
   $('tokenBtn').onclick = askToken;
   async function post() {
     var text = input.value.trim(); if (!text) return;
     send.disabled = true;
     try {
-      var r = await fetch('/send', { method: 'POST', headers: { 'content-type': 'application/json', 'x-owner-token': store.get('swarm.token', '') }, body: JSON.stringify({ text: text, room: roomSel.value || cfg.room }) });
+      var r = await fetch('/send', { method: 'POST', headers: { 'content-type': 'application/json', 'x-owner-token': store.get('observer.token', '') }, body: JSON.stringify({ text: text, room: roomSel.value || cfg.room }) });
       if (r.status === 401) { askToken(); send.disabled = false; return; }
       if (!r.ok) throw new Error((await r.json()).error || r.status);
       input.value = '';
