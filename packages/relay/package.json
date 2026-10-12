@@ -1,0 +1,11 @@
+{
+  "name": "@agent-network/relay",
+  "version": "0.1.0",
+  "description": "the resident network daemon: one XMTP client per identity, a durable inbox, the four verbs over a unix socket (multi-identity relay with auth: PR2)",
+  "type": "module",
+  "main": "dist/daemon.js",
+  "dependencies": {
+    "@agent-network/core": "*",
+    "@agent-network/resolver": "*"
+  }
+}

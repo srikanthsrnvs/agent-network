@@ -1,50 +1,70 @@
 #!/usr/bin/env node
 /**
- * netc: the four network primitives as a command line, answered by the resident daemon (swarm/netd.ts)
- * instead of booting an XMTP client per call. Plain Node, zero dependencies, fast start. Same contract
- * and output as netcli always had — every call first prints what arrived since your last call, then
- * the verb's result as one JSON line:
+ * anet: the four network primitives as a command line, answered by the resident daemon
+ * (packages/relay/dist/daemon.js) instead of booting an XMTP client per call. Plain Node, zero runtime
+ * dependencies, fast start. Every call first prints what arrived since your last call, then the verb's
+ * result as one JSON line:
  *
- *   netc inbox [--wait S]            print new messages; with --wait, block up to S s for the first one
- *   netc send <target> <text...>     target = agent name, 0x address, or a room you are in
- *   netc send <target> --file <path> message body from a file   (no shell quoting)
- *   netc send <target> -             message body from stdin
- *   netc join <room> | leave <room> | members <room> | rooms | whoami
+ *   anet init <name>                 create AGENT_HOME (default ~/.agent-network), the key and an empty names.json; print the address
+ *   anet inbox [--wait S]            print new messages; with --wait, block up to S s for the first one
+ *   anet send <target> <text...>     target = agent name, 0x address, or a room you are in
+ *   anet send <target> --file <path> message body from a file   (no shell quoting)
+ *   anet send <target> -             message body from stdin
+ *   anet join <room> | leave <room> | members <room> | rooms | whoami
+ *   anet daemon [stop]               make sure the daemon runs (prints its health) / stop it
  *
- * If no daemon answers on $AGENT_HOME/netd.sock, netc starts one (after checking with lsof that nothing
- * else has the identity db open, under the same mkdir lock the daemon keeps) and waits for it; if the
- * daemon cannot start, it falls back to the per-call implementation (swarm/netcli-legacy.ts) and says so
- * on stderr, so an agent is never cut off. NETC_DAEMON=0 forces the legacy path.
+ * Identity: AGENT_HOME (key, names.json, XMTP db, daemon files) and AGENT_NAME (falls back to the name
+ * `anet init` wrote in $AGENT_HOME/name). If no daemon answers on $AGENT_HOME/netd.sock, anet starts one
+ * (after checking with lsof that nothing else has the identity db open, under the same mkdir lock the
+ * daemon keeps) and waits for it; if the daemon cannot start, it falls back to the per-call implementation
+ * (packages/relay/dist/direct.js) and says so on stderr, so an agent is never cut off. ANET_DAEMON=0
+ * forces that path. Needs `npm run build` once (the daemon is compiled TypeScript).
  * Exit codes: 0 ok, 1 verb error, 2 usage.
  */
 import { spawn } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync, closeSync } from 'node:fs';
+import { existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync, closeSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { request } from 'node:http';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const name = process.env.AGENT_NAME;
-if (!process.env.AGENT_HOME || !name) {
-  console.error('netcli: AGENT_HOME and AGENT_NAME must be set');
-  process.exit(2);
-}
-const rawHome = process.env.AGENT_HOME;
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const fail = (msg, code = 1) => { console.error(`anet: ${msg}`); process.exit(code); };
+const [cmd = 'inbox', ...rest] = process.argv.slice(2);
+const rawHome = process.env.AGENT_HOME ?? '~/.agent-network';
 const home = rawHome.startsWith('~') ? join(homedir(), rawHome.slice(1)) : rawHome;
+
+// --- init: the one verb that needs no daemon and no name in the environment ----------------------------
+if (cmd === 'init') {
+  const initName = rest[0];
+  if (!initName || !/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(initName)) fail('usage: init <name>   (AGENT_HOME selects where; default ~/.agent-network)', 2);
+  const keystoreModule = join(root, 'packages', 'core', 'dist', 'keystore.js');
+  if (!existsSync(keystoreModule)) fail(`${keystoreModule} is missing; run \`npm run build\` first`);
+  const { loadOrCreateKeystore } = await import(pathToFileURL(keystoreModule).href);
+  const ks = loadOrCreateKeystore(home);
+  const namesPath = join(home, 'names.json');
+  if (!existsSync(namesPath)) writeFileSync(namesPath, '{}\n');
+  writeFileSync(join(home, 'name'), `${initName}\n`);
+  console.log(JSON.stringify({ name: initName, address: ks.address, home }));
+  process.exit(0);
+}
+
+let name = process.env.AGENT_NAME;
+if (!name) { try { name = readFileSync(join(home, 'name'), 'utf8').trim() || undefined; } catch { /* no init here */ } }
+if (!name) fail('AGENT_NAME must be set (or run `anet init <name>` in this AGENT_HOME first)', 2);
+process.env.AGENT_HOME = home;
+process.env.AGENT_NAME = name; // the daemon and the direct client inherit both
 const env = process.env.XMTP_ENV ?? 'dev';
-const root = dirname(dirname(fileURLToPath(import.meta.url)));
 // A unix socket path may not exceed ~104 bytes (macOS); a long home gets a short one in tmpdir (netd does the same).
 const sockLink = join(home, 'netd.sock');
 const sockPath = Buffer.byteLength(sockLink) <= 100 ? sockLink : join(tmpdir(), `netd-${createHash('sha1').update(home).digest('hex').slice(0, 16)}.sock`);
 const paths = { sock: sockPath, lock: join(home, 'netd.lock'), log: join(home, 'netd.log'), db: join(home, `xmtp-${env}.db3`) };
 
-const [cmd = 'inbox', ...rest] = process.argv.slice(2);
 const flag = (f, dflt) => { const i = rest.indexOf(f); return i >= 0 ? rest[i + 1] ?? dflt : dflt; };
 const args = rest.filter((a, i) => !(a.startsWith('--') || (i > 0 && rest[i - 1].startsWith('--'))));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const fail = (msg, code = 1) => { console.error(`netcli: ${msg}`); process.exit(code); };
 
 // --- talking to the daemon ------------------------------------------------------------------------
 function call(method, path, body, timeoutMs = 10_000) {
@@ -104,7 +124,7 @@ async function waitForDbFree(quiet = false) {
     const holders = dbHolders();
     if (!holders.length) return [];
     if (Date.now() > deadline) return holders;
-    if (!said && !quiet) { console.error(`netcli: waiting for pid ${holders.join(',')} to release the identity db`); said = true; }
+    if (!said && !quiet) { console.error(`anet: waiting for pid ${holders.join(',')} to release the identity db`); said = true; }
     await sleep(1000);
   }
 }
@@ -142,10 +162,13 @@ async function waitForHealth(ms, child) {
   }
 }
 
+const DAEMON = join(root, 'packages', 'relay', 'dist', 'daemon.js');
+const DIRECT = join(root, 'packages', 'relay', 'dist', 'direct.js');
+
 function spawnDaemon() {
-  const tsx = realpathSync(join(root, 'node_modules', '.bin', 'tsx'));
+  if (!existsSync(DAEMON)) throw new Error(`${DAEMON} is missing; run \`npm run build\` first`);
   const out = openSync(paths.log, 'a');
-  const child = spawn(process.execPath, [tsx, 'swarm/netd.ts'], {
+  const child = spawn(process.execPath, [DAEMON], {
     cwd: root,
     detached: true,                      // setsid(): survives this process, its shell and docker exec
     stdio: ['ignore', out, out],
@@ -168,7 +191,7 @@ async function ensureDaemon() {
   try {
     if (takeLock()) child = spawnDaemon();
   } catch (e) {
-    console.error(`netcli: cannot start the network daemon (${e.message})`);
+    console.error(`anet: cannot start the network daemon (${e.message})`);
     return null;
   }
   h = await waitForHealth(45_000, child);
@@ -182,11 +205,11 @@ async function ensureDaemon() {
 }
 
 function legacy(reason) {
-  console.error(`netcli: ${reason}; using the per-call network client`);
+  console.error(`anet: ${reason}; using the per-call network client`);
   const stuck = dbHolders();
   if (stuck.length) fail(`the identity db is open by pid ${stuck.join(',')}; refusing to open it twice`);
-  const tsx = realpathSync(join(root, 'node_modules', '.bin', 'tsx'));
-  const r = spawn(process.execPath, [tsx, 'swarm/netcli-legacy.ts', ...process.argv.slice(2)], { cwd: root, stdio: 'inherit', env: process.env });
+  if (!existsSync(DIRECT)) fail(`${DIRECT} is missing; run \`npm run build\` first`);
+  const r = spawn(process.execPath, [DIRECT, ...process.argv.slice(2)], { cwd: root, stdio: 'inherit', env: process.env });
   r.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
   r.on('error', (e) => fail(`cannot run the legacy client: ${e.message}`));
 }
@@ -209,7 +232,22 @@ async function readStdin() {
 }
 
 async function main() {
-  if (process.env.NETC_DAEMON === '0') return legacy('NETC_DAEMON=0');
+  if (cmd === 'daemon') {
+    if (rest[0] === 'stop') {
+      let pid = NaN;
+      try { pid = Number(readFileSync(join(paths.lock, 'pid'), 'utf8').trim()); } catch { /* no lock */ }
+      if (!Number.isFinite(pid) || pid <= 0 || !alive(pid)) { console.log(JSON.stringify({ ok: true, note: 'no daemon running' })); process.exit(0); }
+      process.kill(pid, 'SIGTERM');
+      for (let i = 0; i < 100 && alive(pid); i++) await sleep(100);
+      console.log(JSON.stringify({ ok: !alive(pid), stopped: pid }));
+      process.exit(alive(pid) ? 1 : 0);
+    }
+    const h = await ensureDaemon();
+    if (!h) fail('the network daemon did not start (see ' + paths.log + ')');
+    console.log(JSON.stringify(h));
+    process.exit(0);
+  }
+  if (process.env.ANET_DAEMON === '0' || process.env.NETC_DAEMON === '0') return legacy('ANET_DAEMON=0');
   const h = await ensureDaemon();
   if (!h) return legacy('the network daemon did not start (see ' + paths.log + ')');
 
@@ -219,7 +257,7 @@ async function main() {
   try {
     switch (cmd) {
       case 'inbox': {
-        const wait = Number(flag('--wait', '5')); // netcli listened 5 s after replay; the long-poll returns sooner when something is queued
+        const wait = Number(flag('--wait', '5')); // the direct client listened 5 s after replay; the long-poll returns sooner when something is queued
         if (!Number.isFinite(wait) || wait < 0) throw new Error('--wait takes a number of seconds');
         printed = await drain(Math.min(wait, 600));
         break;
@@ -270,14 +308,14 @@ async function main() {
         break;
       }
       default:
-        throw new Error(`unknown command "${cmd}" (inbox | send | join | leave | members | rooms | whoami)`);
+        throw new Error(`unknown command "${cmd}" (init | inbox | send | join | leave | members | rooms | whoami | daemon)`);
     }
   } catch (err) {
     verbError = err instanceof Error ? err.message : String(err);
   }
-  // Every call also prints what arrived meanwhile (netcli always did), without blocking.
+  // Every call also prints what arrived meanwhile (the CLI always did), without blocking.
   if (cmd !== 'inbox') { try { printed = await drain(0); } catch { /* the verb's result still matters */ } }
-  if (verbError) { console.error(`netcli: ${verbError}`); process.exitCode = /^(usage:|unknown command)/.test(verbError) ? 2 : 1; }
+  if (verbError) { console.error(`anet: ${verbError}`); process.exitCode = /^(usage:|unknown command)/.test(verbError) ? 2 : 1; }
   printMessages(printed);
   if (printed.length === 0 && cmd === 'inbox') console.log('(no new messages)');
   if (out !== undefined) console.log(JSON.stringify(out));

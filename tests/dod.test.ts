@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { keccak256, stringToHex, type Hex } from 'viem';
 import { Resolver, StaticBackend } from '@agent-network/resolver';
-import { Transport, createTools, type Inbound, type Keystore } from '@agent-network/client';
+import { Transport, createTools, type Inbound, type Keystore } from '@agent-network/core';
 import { Keeper } from '@agent-network/keeper';
 
 const ENV = 'dev' as const;
@@ -70,10 +70,7 @@ describe('definition of done', () => {
     const aliceInbox: Inbound[] = [];
     const aliceT = await Transport.start({ keystore: alice, env: ENV, onInbound: (m) => void aliceInbox.push(m) });
     const aliceTools = createTools({ transport: aliceT, resolver, keeper: 'keeper.agent.eth' });
-    const sent = await aliceTools.send.execute!(
-      { target: 'bob.agent.eth', text: 'are you free thursday?' },
-      { toolCallId: 't1', messages: [] },
-    );
+    const sent = await aliceTools.send.execute({ target: 'bob.agent.eth', text: 'are you free thursday?' });
     expect(sent).toMatchObject({ ok: true, to: 'bob.agent.eth' });
 
     // Bob wakes: boot replays what he missed.
@@ -85,7 +82,7 @@ describe('definition of done', () => {
 
     // and Bob replies the same way; Alice gets it live.
     const bobTools = createTools({ transport: bobT, resolver, keeper: 'keeper.agent.eth' });
-    await bobTools.send.execute!({ target: 'alice.agent.eth', text: 'free after 2pm' }, { toolCallId: 't2', messages: [] });
+    await bobTools.send.execute({ target: 'alice.agent.eth', text: 'free after 2pm' });
     await until(() => aliceInbox.find((m) => m.text === 'free after 2pm'));
 
     await aliceT.stop();
@@ -108,16 +105,15 @@ describe('definition of done', () => {
       bob: createTools({ transport: bT, resolver, keeper: 'keeper.agent.eth' }),
       carol: createTools({ transport: cT, resolver, keeper: 'keeper.agent.eth' }),
     };
-    const ctx = { toolCallId: 'x', messages: [] };
 
-    await tools.alice.join.execute!({ room: 'trip-planning' }, ctx);
+    await tools.alice.join.execute({ room: 'trip-planning' });
     await until(() => joined.alice);
-    await tools.bob.join.execute!({ room: 'trip-planning' }, ctx);
+    await tools.bob.join.execute({ room: 'trip-planning' });
     await until(() => joined.bob);
-    await tools.carol.join.execute!({ room: 'trip-planning' }, ctx);
+    await tools.carol.join.execute({ room: 'trip-planning' });
     await until(() => joined.carol);
 
-    const roster = (await tools.carol.members.execute!({ room: 'trip-planning' }, ctx)) as {
+    const roster = (await tools.carol.members.execute({ room: 'trip-planning' })) as {
       ok: boolean;
       members: Array<{ name: string }>;
     };
@@ -125,11 +121,11 @@ describe('definition of done', () => {
     const memberNames = roster.members.map((m) => m.name).sort();
     expect(memberNames).toEqual(expect.arrayContaining(['alice.agent.eth', 'bob.agent.eth', 'carol.agent.eth']));
 
-    await tools.carol.send.execute!({ target: 'trip-planning', text: 'hi all, carol here — what dates?' }, ctx);
+    await tools.carol.send.execute({ target: 'trip-planning', text: 'hi all, carol here — what dates?' });
     await until(() => inboxes.alice.find((m) => m.room === 'trip-planning' && m.text.includes('carol here')));
     await until(() => inboxes.bob.find((m) => m.room === 'trip-planning' && m.text.includes('carol here')));
 
-    await tools.bob.send.execute!({ target: 'trip-planning', text: 'the 14th works for me' }, ctx);
+    await tools.bob.send.execute({ target: 'trip-planning', text: 'the 14th works for me' });
     await until(() => inboxes.carol.find((m) => m.text.includes('14th')));
 
     await Promise.all([aT.stop(), bT.stop(), cT.stop()]);

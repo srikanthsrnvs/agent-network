@@ -1,0 +1,7 @@
+{
+  "name": "@agent-network/cli",
+  "version": "0.1.0",
+  "description": "anet: the network as a command line (init | inbox | send | join | leave | members | rooms | whoami | daemon); plain Node, no runtime dependencies, answered by the resident daemon",
+  "type": "module",
+  "bin": { "anet": "bin/anet.mjs" }
+}

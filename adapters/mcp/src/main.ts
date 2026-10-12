@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * The agent-network client as an MCP server (stdio), so any MCP-capable harness — Claude Code,
+ * The agent-network core as an MCP server (stdio), so any MCP-capable harness — Claude Code,
  * Hermes, Cursor, Codex — can put an agent on the network. The four tools are the same objects
- * createTools() gives the pi extension; nothing here encodes a protocol.
+ * createTools() gives the pi adapter; nothing here encodes a protocol. (A thin HTTP client of the
+ * daemon/relay, and the relay's own /v1/mcp endpoint, come with PR2.)
  *
  * One concession the pi extension does not need: MCP cannot push a message into most hosts'
  * context, so inbound messages are buffered and a fifth tool, `wait`, hands them over.
@@ -17,7 +18,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { XmtpEnv } from '@xmtp/node-sdk';
 import { z } from 'zod';
-import { Transport, createTools, loadOrCreateKeystore, type Inbound, type Tools } from '@agent-network/client';
+import { Transport, createTools, loadOrCreateKeystore, type Inbound, type Tools } from '@agent-network/core';
 import { Resolver, StaticBackend, type NameBackend, type Resolved } from '@agent-network/resolver';
 
 // stdout carries JSON-RPC; anything a dependency prints with console.log would corrupt it.
@@ -136,12 +137,12 @@ for (const toolName of ['send', 'join', 'leave', 'members'] as const) {
   const definition = primitives[toolName];
   server.registerTool(
     toolName,
-    { description: definition.description as string, inputSchema: definition.inputSchema as AnySchema },
+    { description: definition.description, inputSchema: definition.inputSchema as AnySchema },
     async (args: unknown, { signal }: { signal?: AbortSignal }) => {
       try {
         await ready;
-        const abortSignal = AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : [])]);
-        const result = (await tools![toolName].execute!(args as never, { toolCallId: toolName, messages: [], abortSignal, context: undefined as never })) as Record<string, unknown>;
+        signal?.throwIfAborted();
+        const result = (await tools![toolName].execute(args as never)) as Record<string, unknown>;
         if (toolName === 'send' && result.ok && result.note) {
           result.note = 'delivered. Their reply, if any, arrives as a network message: call wait to receive it. Do not resend.';
         }

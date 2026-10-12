@@ -3,15 +3,17 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "adapters/mcp",
+    "tools/observer"
   ],
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
-    "client": "tsx packages/client/src/main.ts",
     "keeper": "tsx packages/keeper/src/main.ts",
-    "observer": "tsx packages/observer/src/main.ts"
+    "observer": "tsx tools/observer/src/main.ts",
+    "cli": "node packages/cli/bin/anet.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",

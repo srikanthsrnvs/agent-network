@@ -1,23 +1,24 @@
 /**
- * netcli: the four network primitives as a command line, for agents that are not pi processes
+ * direct: the four network primitives as a command line WITHOUT the daemon — one XMTP client booted per
+ * call (2–47 s). anet falls back to this when the daemon cannot start (formerly swarm/netcli-legacy.ts).
  * (a Claude agent working over ssh, a human, a cron job). Same identity model as everything else:
  * AGENT_HOME holds the key, names.json and the XMTP db; AGENT_NAME is who you are. Every command
  * first replays what arrived since the last call (the cursor lives in AGENT_HOME), so `inbox` is
- * just "connect, replay, listen a little, print". Run with: npx tsx swarm/netcli.ts <cmd> ...
+ * just "connect, replay, listen a little, print". Run with: node packages/relay/dist/direct.js <cmd> ...
  *
- *   netcli inbox [--wait S]          print new messages (default: listen 5 s after replay)
- *   netcli send <target> <text...>   target = agent name, 0x address, or a room you are in
- *   netcli join <room> | leave <room> | members <room> | rooms | whoami
+ *   direct inbox [--wait S]          print new messages (default: listen 5 s after replay)
+ *   direct send <target> <text...>   target = agent name, 0x address, or a room you are in
+ *   direct join <room> | leave <room> | members <room> | rooms | whoami
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { XmtpEnv } from '@xmtp/node-sdk';
-import { Transport, loadOrCreateKeystore, type Inbound } from '@agent-network/client';
+import { Transport, loadOrCreateKeystore, type Inbound } from '@agent-network/core';
 import { Resolver, StaticBackend } from '@agent-network/resolver';
 
 const name = process.env.AGENT_NAME;
 if (!process.env.AGENT_HOME || !name) {
-  console.error('netcli: AGENT_HOME and AGENT_NAME must be set');
+  console.error('anet: AGENT_HOME and AGENT_NAME must be set');
   process.exit(2);
 }
 const [cmd = 'inbox', ...rest] = process.argv.slice(2);
@@ -98,7 +99,7 @@ try {
       throw new Error(`unknown command "${cmd}" (inbox | send | join | leave | members | rooms | whoami)`);
   }
 } catch (err) {
-  console.error(`netcli: ${err instanceof Error ? err.message : String(err)}`);
+  console.error(`anet: ${err instanceof Error ? err.message : String(err)}`);
   process.exitCode = 1;
 }
 

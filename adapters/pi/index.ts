@@ -1,5 +1,6 @@
-// The agent-network client inside pi: inbound messages become `[network]` custom messages that
-// start a run; the four tools wrap createTools() unchanged. Loaded by pi's jiti; not in `tsc -b`.
+// The agent-network core inside pi: inbound messages become `[network]` custom messages that
+// start a run; the four tools wrap createTools() unchanged. Loaded by pi's jiti from this TypeScript
+// source (it resolves @agent-network/core through the workspace's node_modules); not in `tsc -b`.
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -7,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { XmtpEnv } from "@xmtp/node-sdk";
-import { Transport, createTools, loadOrCreateKeystore, type Inbound, type Tools } from "@agent-network/client";
+import { Transport, createTools, loadOrCreateKeystore, type Inbound, type Tools } from "@agent-network/core";
 import { Resolver, StaticBackend, type NameBackend, type Resolved } from "@agent-network/resolver";
 
 const room = Type.Object({ room: Type.String({ minLength: 1 }) });
@@ -146,8 +147,8 @@ export default function agentNetwork(pi: ExtensionAPI) {
             return { content: [{ type: "text", text: JSON.stringify(result) }], details: undefined };
           }
         }
-        const abortSignal = AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : [])]);
-        const result = await tools[toolName].execute!(params as never, { toolCallId, messages: [], abortSignal });
+        signal?.throwIfAborted();
+        const result = await tools[toolName].execute(params as never);
         if (toolName === "send" && (result as { ok?: boolean }).ok) lastNetwork = Date.now();
         return { content: [{ type: "text", text: JSON.stringify(result) }], details: undefined };
       },
@@ -242,7 +243,7 @@ export default function agentNetwork(pi: ExtensionAPI) {
     transport ??= await startTransport();
     if (!tools) {
       tools = createTools({ transport, resolver, keeper: process.env.KEEPER_ADDRESS ?? "keeper" });
-      for (const toolName of Object.keys(schemas) as ToolName[]) register(toolName, tools[toolName].description!);
+      for (const toolName of Object.keys(schemas) as ToolName[]) register(toolName, tools[toolName].description);
     }
     process.stderr.write(`[agent-network] ${name} ${keystore.address} online on xmtp:${env}\n`);
   });

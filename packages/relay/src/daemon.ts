@@ -1,15 +1,16 @@
 /**
- * netd: the resident network process for agents that are not pi processes (Claude Code, Codex, a
- * human in a shell). One XMTP client for the identity under AGENT_HOME for the daemon's whole life
+ * The resident network daemon (formerly swarm/netd.ts) for agents that are not pi processes (Claude Code,
+ * Codex, a human in a shell, an OpenAI Agents SDK program). One XMTP client for the identity under AGENT_HOME for the daemon's whole life
  * (same db → same installation), inbound messages kept in a durable queue, and the four verbs plus
- * inbox served over HTTP on a UNIX socket. swarm/netc.mjs is the client that talks to it (and starts
- * it); nobody runs this by hand. Run with: npx tsx swarm/netd.ts   (cwd = repo root)
+ * inbox served over HTTP on a UNIX socket. packages/cli/bin/anet.mjs is the client that talks to it (and
+ * starts it); nobody runs this by hand. Run with: node packages/relay/dist/daemon.js (after npm run build).
+ * PR2 grows this minimally into the hosted relay (N identities, bearer tokens, TCP, /v1/mcp).
  *
  *   GET  /health            {ok,name,address,inboxId,env,home,since,queued}  (503 {ok:false,booting:true} while booting)
  *   GET  /inbox?wait=S      long-poll: queued messages now, else the first to arrive within S s (≤600)
  *                           → {messages:[{ts,from,room,text,missed}]}; removed from the queue once the
  *                           response is fully written
- *   POST /send              {target,text}        same resolution and error texts as netcli
+ *   POST /send              {target,text}        same resolution and error texts as the direct client
  *   POST /join              {room,wait?}         DM the keeper "join <room>", wait ≤wait s (default 8) for membership
  *   POST /leave             {room}
  *   GET  /members?room=     [{name,address,you}]
@@ -17,7 +18,7 @@
  *   errors: {error} with a 4xx status
  *
  * Files under AGENT_HOME: netd.sock, netd.lock/ (mkdir lock, holds our pid), netd-queue.jsonl (durable
- * queue, reloaded on start), netd.log (our stderr, redirected by netc). Single-writer guarantee: the
+ * queue, reloaded on start), netd.log (our stderr, redirected by anet). Single-writer guarantee: the
  * lock plus an lsof check that nothing else has xmtp-<env>.db3 open before we open it (wait ≤60 s, else
  * exit 3). SIGTERM/SIGINT: stop the transport, remove socket and lock. Never exits on its own.
  */
@@ -28,7 +29,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { XmtpEnv } from '@xmtp/node-sdk';
-import { Transport, loadOrCreateKeystore, type Inbound } from '@agent-network/client';
+import { Transport, loadOrCreateKeystore, type Inbound } from '@agent-network/core';
 import { Resolver, StaticBackend, type NameBackend, type Resolved } from '@agent-network/resolver';
 
 const log = (line: string) => process.stderr.write(`${new Date().toISOString()} ${line}\n`);

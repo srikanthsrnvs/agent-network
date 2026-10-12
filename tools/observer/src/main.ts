@@ -22,7 +22,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { isAddress } from 'viem';
-import { Transport, loadOrCreateKeystore, resolveHome, type Inbound } from '@agent-network/client';
+import { Transport, loadOrCreateKeystore, resolveHome, type Inbound } from '@agent-network/core';
 import { Resolver, StaticBackend, type NameBackend, type Resolved } from '@agent-network/resolver';
 
 const log = (...args: unknown[]) => process.stderr.write(`[observer] ${args.map(String).join(' ')}\n`);

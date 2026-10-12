@@ -3,7 +3,7 @@
  * no keeper) driven by the SDK's Client over stdio, on the real XMTP dev network.
  *   A lists the five tools, reads agent://self, sends to "b"; B's wait returns it from "a";
  *   B replies; A's wait returns it from "b".
- * Needs `npm run build` first (spawns node on packages/mcp/dist/main.js).
+ * Needs `npm run build` first (spawns node on adapters/mcp/dist/main.js).
  */
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,7 +13,7 @@ import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
-const SERVER = resolve(import.meta.dirname, '../packages/mcp/dist/main.js');
+const SERVER = resolve(import.meta.dirname, '../adapters/mcp/dist/main.js');
 // Generous until-timeouts: the dev network is usually ~1 s but is a real shared network.
 const CALL = { timeout: 120_000 };
 const WAIT = 90;
