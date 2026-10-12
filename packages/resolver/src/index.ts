@@ -39,7 +39,10 @@ export class StaticBackend implements NameBackend {
     const n = normalizeName(name);
     const a = getAddress(address);
     this.forward.set(n, a);
-    this.backward.set(a.toLowerCase(), n);
+    // A scope may contain both alice and demo.alice. Prefer its short alias for
+    // inbound attribution; adding a qualified address must not rename keeper/owner.
+    const previous = this.backward.get(a.toLowerCase());
+    if (!previous || previous.includes('.') || !n.includes('.')) this.backward.set(a.toLowerCase(), n);
   }
 
   async resolve(name: string): Promise<Resolved | null> {

@@ -21,6 +21,8 @@ describe('scoped contact persistence', () => {
       expect(() => contacts.replace({ Owner: self, owner: other })).toThrow('conflicting');
       expect(() => contacts.replace({ owner: 'bad' })).toThrow('valid name');
       expect(readFileSync(path, 'utf8')).toBe(saved);
+      contacts.replace({ keeper: other, 'demo.keeper': other });
+      expect(await contacts.reverse(other)).toBe('keeper');
     } finally { rmSync(home, { recursive: true, force: true }); }
   });
 });
