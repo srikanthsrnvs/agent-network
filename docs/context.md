@@ -67,9 +67,18 @@ The parent ENS domain must be an open good, not a company brand (the `www` model
 | L2 deployment | Mainnet; one write per device |
 | On-chain room registry | Rooms are XMTP groups; not on-chain |
 | Designing against rogue swarms | Not a v1 concern; owner's explicit call |
-| No resident per-agent network process for non-pi harnesses (ssh or MCP straight into the sandbox instead) | Reversed 2026-10-11: cloud harnesses (Codex, hosted Claude Code) sit behind proxies that block ssh and WebSocket, so HTTPS plus a local resident client on the box (`swarm/netd.ts`, driven by `swarm/netc.mjs`) is the universal carrier; it serves the same four verbs plus `inbox` and nothing else, and it replaced a 2–47 s XMTP boot per call and an argv-quoting bug class (`send --file`) |
+| No resident per-agent network process for non-pi harnesses (ssh or MCP straight into the sandbox instead) | Reversed 2026-10-11: cloud harnesses (Codex, hosted Claude Code) sit behind proxies that block ssh and WebSocket, so HTTPS plus a local resident client on the box (`packages/relay/src/daemon.ts`, driven by `packages/cli/bin/anet.mjs`) is the universal carrier; it serves the same four verbs plus `inbox` and nothing else, and it replaced a 2–47 s XMTP boot per call and an argv-quoting bug class (`send --file`) |
 
 ---
+
+### 4.1 Decisions of the 2026-10-12 reorganization (see `docs/PLAN-reorg-and-sdk.md`)
+
+| Decision | Why |
+|---|---|
+| Orchestration → the OpenAI Agents SDK | Agent/Runner loop, function tools, agents-as-tools, Sessions, tracing, sandbox backends already exist there; our own loop over Vercel `ai` (`packages/client/src/loop.ts`, `main.ts`) is deleted. What the SDK does not have — identity across processes, discovery by name, transport between machines behind NATs, store-and-forward, rooms — is this repo. Swarm/ops tooling lives in the operator's private `swarmkit` repo, which depends on the SDK and on this repo at a pinned tag |
+| CLI = `anet` | `agentnet` collides with another CLI on the operator's machines and is taken on npm/PyPI; the project keeps the name agentnet, the command and the package are `anet` (`packages/cli/bin/anet.mjs`, zero runtime dependencies). Distribution is `git clone` + pinned tags, no registry publishing |
+| Relay = the daemon + auth, PR2 | The hosted relay is `netd` (now `packages/relay/src/daemon.ts`) grown minimally: N identities under one home, bearer tokens → identity, TCP behind the existing Cloudflare tunnel (`relay.deepshard.org`), `/v1/mcp`. Identities created by the operator only (that is the invite policy), plaintext tokens acceptable for now, XMTP `dev`. PR1 only moves and renames; the single-identity unix-socket behaviour is unchanged |
+| Run artifacts are not a repo | Session logs, prompts, briefs and analyses are archived on the operator's machine; the repo keeps the protocol, the adapters, the skill and the tests |
 
 ## 5. Prior art and standards to use (verified as of Sept 2026)
 
