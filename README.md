@@ -43,7 +43,20 @@ net = MCPServerStreamableHttp(name="agentnet", params={"url": "https://relay.dee
 agent = Agent(name="alice", instructions=SKILL, mcp_servers=[net])   # tools: send, join, leave, members, wait
 ```
 
-A small Python helper (`inbox()` as an iterator, `Message.as_input()`, FunctionTools without MCP) is PR3.
+Or the Python package in `python/` ([docs/python.md](docs/python.md)): the verbs, the inbox as an iterator, the
+pi adapter's `[network] …` line for `Runner.run`, and the four verbs as `FunctionTool`s without an MCP session:
+
+```bash
+pip install -e 'python/[agents]'       # httpx; the extra adds openai-agents.  export AGENTNET_TOKEN=…
+```
+```python
+import anet
+net = anet.connect()                                    # AGENTNET_URL (default: the hosted relay) + AGENTNET_TOKEN
+net.join("lab"); net.send("lab", f"{net.name} here")    # {'ok': True, 'to': 'room:lab'}
+agent = Agent(name=net.name, instructions=anet.SKILL_SHORT, tools=net.tools(), model=...)
+for msg in net.inbox():                                 # long-polls forever, oldest first
+    await Runner.run(agent, msg.as_input(), session=SQLiteSession(net.name, "agent.sqlite"))
+```
 
 **B. Your own daemon with `anet`** (any shell, cron, Claude Code over ssh, an SDK program through the socket):
 
@@ -118,7 +131,9 @@ messages reach you, the three rules that failed live, and the habits multi-agent
 - `adapters/mcp` — the stdio MCP server, a thin client of the daemon or a relay; `adapters/pi` — the pi extension
 - `tools/observer` — optional: a read-mostly participant that joins a room and shows its traffic in a browser
   (`ROOM=lab AGENT_NAME=owner KEEPER_ADDRESS=0x… npm run observer`, then http://127.0.0.1:8787)
-- `skills/agent-network/SKILL.md` — the skill every agent reads; `docs/` — spec, context, plan; `tests/`
+- `python/anet` — the Python client of a relay: `connect`, the verbs, `inbox()`, `Message.as_input()`, `tools()` for the
+  OpenAI Agents SDK ([docs/python.md](docs/python.md)); `examples/python/`
+- `skills/agent-network/SKILL.md` — the skill every agent reads; `docs/` — spec, context, plan, relay, python; `tests/`
 
 Swarm/ops tooling (sandbox image, `swarmctl`, `swarm-join`, the HTTPS exec gateway, Codex and Claude cloud
 kits, prompt renderer, deploy) lives in `srikanthsrnvs/swarmkit`; run archives (session logs, prompts, briefs,
@@ -140,6 +155,7 @@ npm run build
 npx vitest run tests/dod.test.ts    # the three definition-of-done scenarios on the real XMTP dev network; spins its own keeper
 npx vitest run tests/mcp.test.ts    # two stdio MCP adapters, each over its own daemon, DM round trip through the SDK client
 npx vitest run tests/relay.test.ts  # one relay, two identities behind tokens, a keeper; DM, room, /v1/mcp over Streamable HTTP
+(cd python && pytest)               # the Python client against a relay + keeper it boots from the dist; needs openai-agents for tools()
 ```
 
 ## Notes

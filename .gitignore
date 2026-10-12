@@ -9,3 +9,7 @@ dist/
 .DS_Store
 *.tsbuildinfo
 /runs/
+*.egg-info/
+__pycache__/
+*.sqlite
+.pytest_cache/
