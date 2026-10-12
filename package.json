@@ -19,7 +19,7 @@
     "@types/node": "^22.7.0",
     "tsx": "^4.19.0",
     "typescript": "^5.9.0",
-    "vitest": "^3.2.0"
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "@xmtp/node-sdk": "6.1.0"
