@@ -1,10 +1,13 @@
 /**
  * MCP mode: two `agent-network-mcp` server processes (fresh identities, a shared names.json,
- * no keeper) driven by the SDK's Client over stdio, on the real XMTP dev network.
+ * no keeper) driven by the SDK's Client over stdio, on the real XMTP dev network. The adapter is a
+ * thin client: each process starts the identity's daemon (`anet daemon`, packages/relay/dist/daemon.js)
+ * under its AGENT_HOME and talks to it over the unix socket; the daemons are stopped at the end.
  *   A lists the five tools, reads agent://self, sends to "b"; B's wait returns it from "a";
  *   B replies; A's wait returns it from "b".
  * Needs `npm run build` first (spawns node on adapters/mcp/dist/main.js).
  */
+import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -14,6 +17,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 
 const SERVER = resolve(import.meta.dirname, '../adapters/mcp/dist/main.js');
+const ANET = resolve(import.meta.dirname, '../packages/cli/bin/anet.mjs');
 // Generous until-timeouts: the dev network is usually ~1 s but is a real shared network.
 const CALL = { timeout: 120_000 };
 const WAIT = 90;
@@ -25,7 +29,7 @@ const parse = <T>(result: { content?: unknown }): T => {
 };
 
 let tmp: string;
-const agents: Record<'a' | 'b', { home: string; address: `0x${string}`; client: Client }> = {} as never;
+const agents: Record<'a' | 'b', { name: string; home: string; address: `0x${string}`; client: Client }> = {} as never;
 
 beforeAll(async () => {
   if (!existsSync(SERVER)) throw new Error(`${SERVER} missing — run \`npm run build\` first`);
@@ -53,12 +57,15 @@ beforeAll(async () => {
         stderr: 'pipe',
       }),
     );
-    agents[name] = { home, address: names[name] as `0x${string}`, client };
+    agents[name] = { name, home, address: names[name] as `0x${string}`, client };
   }
 });
 
 afterAll(async () => {
   await Promise.all(Object.values(agents).map((a) => a.client.close()));
+  for (const a of Object.values(agents)) {
+    try { execFileSync(process.execPath, [ANET, 'daemon', 'stop'], { env: { ...process.env, AGENT_HOME: a.home, AGENT_NAME: a.name }, stdio: 'ignore', timeout: 30_000 }); } catch { /* already gone */ }
+  }
   rmSync(tmp, { recursive: true, force: true });
 });
 

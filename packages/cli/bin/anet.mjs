@@ -12,6 +12,9 @@
  *   anet send <target> -             message body from stdin
  *   anet join <room> | leave <room> | members <room> | rooms | whoami
  *   anet daemon [stop]               make sure the daemon runs (prints its health) / stop it
+ *   anet relay [--home H] [--listen host:port] [--socket path]   serve a relay (N identities behind bearer tokens)
+ *   anet relay add-identity <name> [--home H]                   create RELAY_HOME/identities/<name> and its token
+ *   anet relay list [--home H]                                  the relay's identities (name, address)
  *
  * Identity: AGENT_HOME (key, names.json, XMTP db, daemon files) and AGENT_NAME (falls back to the name
  * `anet init` wrote in $AGENT_HOME/name). If no daemon answers on $AGENT_HOME/netd.sock, anet starts one
@@ -19,13 +22,18 @@
  * daemon keeps) and waits for it; if the daemon cannot start, it falls back to the per-call implementation
  * (packages/relay/dist/direct.js) and says so on stderr, so an agent is never cut off. ANET_DAEMON=0
  * forces that path. Needs `npm run build` once (the daemon is compiled TypeScript).
+ *
+ * Relay mode: with AGENTNET_URL and AGENTNET_TOKEN set (or ANET_URL/ANET_TOKEN), every verb is the same
+ * request to $AGENTNET_URL/v1/<verb> with `Authorization: Bearer <token>` — no daemon, no identity on this
+ * machine; the relay holds it (see docs/relay.md). `init` and `relay` are the two verbs that ignore it.
  * Exit codes: 0 ok, 1 verb error, 2 usage.
  */
 import { spawn } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync, closeSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, closeSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
 import { request } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -51,36 +59,102 @@ if (cmd === 'init') {
   process.exit(0);
 }
 
+const VERSION = (() => { try { return JSON.parse(readFileSync(join(root, 'packages', 'cli', 'package.json'), 'utf8')).version ?? '0'; } catch { return '0'; } })();
+const flag = (f, dflt) => { const i = rest.indexOf(f); return i >= 0 ? rest[i + 1] ?? dflt : dflt; };
+const args = rest.filter((a, i) => !(a.startsWith('--') || (i > 0 && rest[i - 1].startsWith('--'))));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// --- relay: serve, add-identity, list (operator side; see docs/relay.md) -------------------------------------
+if (cmd === 'relay') {
+  const rawRelayHome = flag('--home', process.env.RELAY_HOME ?? '~/relay');
+  const relayHome = rawRelayHome.startsWith('~') ? join(homedir(), rawRelayHome.slice(1)) : resolve(rawRelayHome);
+  const tokensPath = join(relayHome, 'tokens.json');
+  const readTokens = () => { try { return JSON.parse(readFileSync(tokensPath, 'utf8')); } catch { return {}; } };
+  const keystoreModule = join(root, 'packages', 'core', 'dist', 'keystore.js');
+  if (!existsSync(keystoreModule)) fail(`${keystoreModule} is missing; run \`npm run build\` first`);
+  const sub = args[0];
+  if (sub === 'add-identity') {
+    const idName = args[1];
+    if (!idName || !/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(idName) || idName === '_admin') fail('usage: relay add-identity <name> [--home RELAY_HOME]', 2);
+    const { loadOrCreateKeystore } = await import(pathToFileURL(keystoreModule).href);
+    mkdirSync(join(relayHome, 'tokens'), { recursive: true });
+    const ks = loadOrCreateKeystore(join(relayHome, 'identities', idName));
+    const tokens = readTokens();
+    const tokenFile = join(relayHome, 'tokens', `${idName}.token`);
+    let token = Object.keys(tokens).find((t) => tokens[t] === idName);
+    if (!token) {
+      token = randomBytes(24).toString('hex');
+      tokens[token] = idName;
+      writeFileSync(tokensPath, JSON.stringify(tokens, null, 2) + '\n', { mode: 0o600 });
+      chmodSync(tokensPath, 0o600);
+    }
+    writeFileSync(tokenFile, token + '\n', { mode: 0o600 });
+    chmodSync(tokenFile, 0o600);
+    if (!existsSync(join(relayHome, 'names.json'))) writeFileSync(join(relayHome, 'names.json'), '{}\n');
+    console.log(JSON.stringify({ name: idName, address: ks.address, tokenFile }));
+    process.exit(0);
+  }
+  if (sub === 'list') {
+    const { loadOrCreateKeystore } = await import(pathToFileURL(keystoreModule).href);
+    const dir = join(relayHome, 'identities');
+    const names = existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort() : [];
+    const byName = new Set(Object.values(readTokens()));
+    console.log(JSON.stringify(names.map((n) => ({ name: n, address: loadOrCreateKeystore(join(dir, n)).address, token: byName.has(n) }))));
+    process.exit(0);
+  }
+  if (sub !== undefined) fail('usage: relay [--home H] [--listen host:port] [--socket path] | relay add-identity <name> | relay list', 2);
+  const RELAY = join(root, 'packages', 'relay', 'dist', 'relay.js');
+  if (!existsSync(RELAY)) fail(`${RELAY} is missing; run \`npm run build\` first`);
+  if (!rest.includes('--listen') && !rest.includes('--socket')) rest.push('--socket', join(relayHome, 'relay.sock'));
+  // relay.js reads --home/--listen/--socket from argv; it runs in the foreground as our child (same stdio, same signals).
+  const child = spawn(process.execPath, [RELAY, ...rest], { cwd: root, stdio: 'inherit', env: { ...process.env, RELAY_HOME: relayHome } });
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => { try { child.kill(sig); } catch { /* gone */ } });
+  child.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
+  child.on('error', (e) => fail(`cannot start the relay: ${e.message}`));
+  await new Promise(() => undefined); // the child owns the process from here; its exit ends ours
+}
+
+// --- relay client mode: AGENTNET_URL + AGENTNET_TOKEN ---------------------------------------------------------
+const relayUrl = (process.env.AGENTNET_URL ?? process.env.ANET_URL ?? '').replace(/\/+$/, '');
+const relayToken = process.env.AGENTNET_TOKEN ?? process.env.ANET_TOKEN;
+if (relayUrl && !relayToken) fail('AGENTNET_TOKEN must be set with AGENTNET_URL', 2);
+
 let name = process.env.AGENT_NAME;
-if (!name) { try { name = readFileSync(join(home, 'name'), 'utf8').trim() || undefined; } catch { /* no init here */ } }
-if (!name) fail('AGENT_NAME must be set (or run `anet init <name>` in this AGENT_HOME first)', 2);
+if (!name && !relayUrl) { try { name = readFileSync(join(home, 'name'), 'utf8').trim() || undefined; } catch { /* no init here */ } }
+if (!name && !relayUrl) fail('AGENT_NAME must be set (or run `anet init <name>` in this AGENT_HOME first)', 2);
 process.env.AGENT_HOME = home;
-process.env.AGENT_NAME = name; // the daemon and the direct client inherit both
+if (name) process.env.AGENT_NAME = name; // the daemon and the direct client inherit both
 const env = process.env.XMTP_ENV ?? 'dev';
 // A unix socket path may not exceed ~104 bytes (macOS); a long home gets a short one in tmpdir (netd does the same).
 const sockLink = join(home, 'netd.sock');
 const sockPath = Buffer.byteLength(sockLink) <= 100 ? sockLink : join(tmpdir(), `netd-${createHash('sha1').update(home).digest('hex').slice(0, 16)}.sock`);
 const paths = { sock: sockPath, lock: join(home, 'netd.lock'), log: join(home, 'netd.log'), db: join(home, `xmtp-${env}.db3`) };
 
-const flag = (f, dflt) => { const i = rest.indexOf(f); return i >= 0 ? rest[i + 1] ?? dflt : dflt; };
-const args = rest.filter((a, i) => !(a.startsWith('--') || (i > 0 && rest[i - 1].startsWith('--'))));
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// --- talking to the daemon ------------------------------------------------------------------------
+// --- talking to the daemon (unix socket) or the relay ($AGENTNET_URL/v1, bearer token) -----------------
 function call(method, path, body, timeoutMs = 10_000) {
   return new Promise((resolve, reject) => {
     const data = body === undefined ? undefined : JSON.stringify(body);
-    const req = request({ socketPath: paths.sock, method, path, headers: data ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) } : {} }, (res) => {
+    const headers = { 'user-agent': `anet/${VERSION}`, accept: 'application/json' };
+    if (data) { headers['content-type'] = 'application/json'; headers['content-length'] = Buffer.byteLength(data); }
+    let target;
+    if (relayUrl) {
+      const u = new URL(`${relayUrl}/v1${path}`);
+      headers.authorization = `Bearer ${relayToken}`;
+      target = { method, hostname: u.hostname, port: u.port || undefined, path: u.pathname + u.search, headers };
+    } else {
+      target = { socketPath: paths.sock, method, path, headers };
+    }
+    const req = (relayUrl && relayUrl.startsWith('https:') ? httpsRequest : request)(target, (res) => {
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => {
         const text = Buffer.concat(chunks).toString('utf8');
         let json;
-        try { json = JSON.parse(text); } catch { return reject(new Error(`daemon answered ${res.statusCode} with non-JSON`)); }
+        try { json = JSON.parse(text); } catch { return reject(new Error(`${relayUrl ? 'relay' : 'daemon'} answered ${res.statusCode} with non-JSON`)); }
         resolve({ status: res.statusCode, json });
       });
     });
-    req.setTimeout(timeoutMs, () => req.destroy(new Error('daemon did not answer in time')));
+    req.setTimeout(timeoutMs, () => req.destroy(new Error(`${relayUrl ? 'relay' : 'daemon'} did not answer in time`)));
     req.on('error', reject);
     if (data) req.write(data);
     req.end();
@@ -220,9 +294,16 @@ const printMessages = (messages) => {
 };
 
 async function drain(waitSeconds) {
-  const r = await call('GET', `/inbox?wait=${waitSeconds}`, undefined, waitSeconds * 1000 + 15_000);
-  if (r.status !== 200) throw new Error(r.json.error ?? `inbox failed (${r.status})`);
-  return r.json.messages;
+  // A relay behind a proxy answers early (it caps one poll at 80 s); keep asking until our own deadline.
+  const deadline = Date.now() + waitSeconds * 1000;
+  for (;;) {
+    const remaining = Math.ceil((deadline - Date.now()) / 1000);
+    const wait = Math.max(Math.min(remaining, 600), 0);
+    const t0 = Date.now();
+    const r = await call('GET', `/inbox?wait=${wait}`, undefined, wait * 1000 + 15_000);
+    if (r.status !== 200) throw new Error(r.json.error ?? `inbox failed (${r.status})`);
+    if (r.json.messages.length || wait === 0 || Date.now() - t0 < 1000 || Date.now() >= deadline) return r.json.messages;
+  }
 }
 
 async function readStdin() {
@@ -232,6 +313,7 @@ async function readStdin() {
 }
 
 async function main() {
+  if (relayUrl && cmd === 'daemon') fail('`anet daemon` runs the local daemon; unset AGENTNET_URL to use it', 2);
   if (cmd === 'daemon') {
     if (rest[0] === 'stop') {
       let pid = NaN;
@@ -247,9 +329,17 @@ async function main() {
     console.log(JSON.stringify(h));
     process.exit(0);
   }
-  if (process.env.ANET_DAEMON === '0' || process.env.NETC_DAEMON === '0') return legacy('ANET_DAEMON=0');
-  const h = await ensureDaemon();
-  if (!h) return legacy('the network daemon did not start (see ' + paths.log + ')');
+  let h;
+  if (relayUrl) {
+    const r = await call('GET', '/whoami', undefined, 120_000).catch((e) => { throw new Error(`cannot reach the relay at ${relayUrl}: ${e.message}`); });
+    if (r.status !== 200) fail(r.json.error ?? `the relay answered ${r.status}`);
+    h = r.json;
+    name = h.name;
+  } else {
+    if (process.env.ANET_DAEMON === '0' || process.env.NETC_DAEMON === '0') return legacy('ANET_DAEMON=0');
+    h = await ensureDaemon();
+    if (!h) return legacy('the network daemon did not start (see ' + paths.log + ')');
+  }
 
   let out;
   let verbError;
@@ -304,11 +394,11 @@ async function main() {
         break;
       }
       case 'whoami': {
-        out = { name, address: h.address, inboxId: h.inboxId, env, home: h.home };
+        out = relayUrl ? { name, address: h.address, inboxId: h.inboxId, env: h.env, relay: relayUrl } : { name, address: h.address, inboxId: h.inboxId, env, home: h.home };
         break;
       }
       default:
-        throw new Error(`unknown command "${cmd}" (init | inbox | send | join | leave | members | rooms | whoami | daemon)`);
+        throw new Error(`unknown command "${cmd}" (init | inbox | send | join | leave | members | rooms | whoami | daemon | relay)`);
     }
   } catch (err) {
     verbError = err instanceof Error ? err.message : String(err);

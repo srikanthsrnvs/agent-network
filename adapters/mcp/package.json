@@ -1,7 +1,7 @@
 {
   "name": "@agent-network/mcp",
   "version": "0.1.0",
-  "description": "MCP server (stdio): the same four tools \u2014 send, join, leave, members \u2014 plus wait, for any MCP-capable harness",
+  "description": "MCP server (stdio): the same four tools — send, join, leave, members — plus wait, for any MCP-capable harness; a thin client of the local daemon or of a relay (AGENTNET_URL + AGENTNET_TOKEN)",
   "type": "module",
   "main": "dist/main.js",
   "bin": {
@@ -9,8 +9,7 @@
   },
   "dependencies": {
     "@agent-network/core": "*",
-    "@agent-network/resolver": "*",
-    "@modelcontextprotocol/sdk": "^1.32.1",
-    "zod": "^4.6.0"
+    "@agent-network/relay": "*",
+    "@modelcontextprotocol/sdk": "^1.32.1"
   }
 }
